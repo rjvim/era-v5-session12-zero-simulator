@@ -271,3 +271,30 @@ def test_fsdp_validation_harness_exists_and_states_tolerance():
     assert "15%" in src, "tolerance must be stated in the script"
     assert "IT IS NOT RUN IN THIS REPO" in src, "must be explicit it was not run"
     assert "FULL_SHARD" in src and "SHARD_GRAD_OP" in src
+
+
+def test_artifacts_are_reproducible():
+    """Re-running must reproduce every artifact bit-for-bit except timings.
+
+    Determinism is what makes the committed artifacts checkable by someone
+    else, so it is worth asserting rather than assuming. wall_seconds is the
+    only field allowed to vary.
+    """
+    import copy
+    import subprocess
+    import sys
+
+    before = {n: art(n) for n in sorted(os.listdir(ART)) if n.endswith(".json")}
+    subprocess.run([sys.executable, "run_experiments.py"], cwd=ROOT,
+                   check=True, capture_output=True)
+    after = {n: art(n) for n in before}
+
+    def strip(o):
+        if isinstance(o, dict):
+            return {k: strip(v) for k, v in o.items() if k != "wall_seconds"}
+        if isinstance(o, list):
+            return [strip(v) for v in o]
+        return o
+
+    for n in before:
+        assert strip(before[n]) == strip(after[n]), f"{n} is not reproducible"

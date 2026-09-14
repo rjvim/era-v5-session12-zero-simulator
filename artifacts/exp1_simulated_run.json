@@ -68,7 +68,7 @@
         "params": 54144
       },
       "peak_bytes_per_gpu": 502784,
-      "wall_seconds": 3.3784162998199463
+      "wall_seconds": 3.2265305519104004
     },
     "1": {
       "comm_bytes_per_gpu_per_step": 104904.0,
@@ -116,7 +116,7 @@
         "params": 54144
       },
       "peak_bytes_per_gpu": 188072,
-      "wall_seconds": 2.8480310440063477
+      "wall_seconds": 2.731102466583252
     },
     "2": {
       "comm_bytes_per_gpu_per_step": 104904.0,
@@ -164,7 +164,7 @@
         "params": 54144
       },
       "peak_bytes_per_gpu": 135620,
-      "wall_seconds": 2.9159207344055176
+      "wall_seconds": 2.608520269393921
     },
     "3": {
       "comm_bytes_per_gpu_per_step": 157356.0,
@@ -213,7 +213,7 @@
         "transient": 1692
       },
       "peak_bytes_per_gpu": 84860,
-      "wall_seconds": 3.0808265209198
+      "wall_seconds": 2.6974830627441406
     }
   }
 }
