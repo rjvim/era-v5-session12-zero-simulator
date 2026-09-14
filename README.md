@@ -6,7 +6,7 @@ ZeRO-1/2/3, show how memory and computation change.
 ```
 pip install -r requirements.txt
 python run_experiments.py       # regenerates every artifact
-python -m pytest tests/ -q      # 51 tests
+python -m pytest tests/ -q      # 52 tests
 jupyter notebook notebook.ipynb # narrated walkthrough, figures + outputs committed
 ```
 
@@ -332,7 +332,7 @@ zerosim/data.py          syllable-level mantra corpus
 run_experiments.py       regenerates artifacts/ (9 experiments)
 tools/build_notebook.py  regenerates notebook.ipynb
 validate_against_fsdp.py checks the ledger against real PyTorch FSDP (see 9b)
-tests/                   51 tests
+tests/                   52 tests
 notebook.ipynb           narrated walkthrough, 3 figures, outputs committed
 ```
 
