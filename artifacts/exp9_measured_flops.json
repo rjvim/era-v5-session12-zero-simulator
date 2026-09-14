@@ -1,0 +1,8 @@
+{
+  "estimate_6psi_plus_attn": 2697216.0,
+  "hand_counted_matmul_flops": 2534400,
+  "note": "The 6*Psi rule is an ESTIMATE and on a model this small it is a poor one: the output head (d x V) and the attention term are a large fraction of a 27k-parameter model, and 6*Psi assumes they are not. At 27.9B the rule is good to a few percent. Recording the discrepancy rather than quoting 6*Psi as if it were exact.",
+  "params": 27072,
+  "ratio_measured_over_estimate": 0.9396355353075171,
+  "tokens": 16
+}

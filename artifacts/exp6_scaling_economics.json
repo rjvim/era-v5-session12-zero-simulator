@@ -1,0 +1,123 @@
+{
+  "note": "Read the last column as: your compute step must last at least this long before the communication is only a 10% tax. If a step finishes faster than that, adding the extra node is buying you memory you then pay for in idle GPUs.",
+  "psi": 27900000000.0,
+  "scenarios": {
+    "B200_N16_stage1": {
+      "breakeven_step_seconds_at_10pct_overhead": 10.462,
+      "comm_bytes_per_gpu_per_step": 104625000000.0,
+      "comm_seconds_per_step": 1.0462,
+      "gpus": 16,
+      "link_gbps": 100.0,
+      "nodes": 2,
+      "stage": 1
+    },
+    "B200_N16_stage3": {
+      "breakeven_step_seconds_at_10pct_overhead": 15.694,
+      "comm_bytes_per_gpu_per_step": 156937500000.0,
+      "comm_seconds_per_step": 1.5694,
+      "gpus": 16,
+      "link_gbps": 100.0,
+      "nodes": 2,
+      "stage": 3
+    },
+    "B200_N64_stage1": {
+      "breakeven_step_seconds_at_10pct_overhead": 10.986,
+      "comm_bytes_per_gpu_per_step": 109856250000.0,
+      "comm_seconds_per_step": 1.0986,
+      "gpus": 64,
+      "link_gbps": 100.0,
+      "nodes": 8,
+      "stage": 1
+    },
+    "B200_N64_stage3": {
+      "breakeven_step_seconds_at_10pct_overhead": 16.478,
+      "comm_bytes_per_gpu_per_step": 164784375000.0,
+      "comm_seconds_per_step": 1.6478,
+      "gpus": 64,
+      "link_gbps": 100.0,
+      "nodes": 8,
+      "stage": 3
+    },
+    "B200_N8_stage1": {
+      "breakeven_step_seconds_at_10pct_overhead": 1.085,
+      "comm_bytes_per_gpu_per_step": 97650000000.0,
+      "comm_seconds_per_step": 0.1085,
+      "gpus": 8,
+      "link_gbps": 900.0,
+      "nodes": 1,
+      "stage": 1
+    },
+    "B200_N8_stage3": {
+      "breakeven_step_seconds_at_10pct_overhead": 1.627,
+      "comm_bytes_per_gpu_per_step": 146475000000.0,
+      "comm_seconds_per_step": 0.1628,
+      "gpus": 8,
+      "link_gbps": 900.0,
+      "nodes": 1,
+      "stage": 3
+    },
+    "H100_N16_stage1": {
+      "breakeven_step_seconds_at_10pct_overhead": 23.25,
+      "comm_bytes_per_gpu_per_step": 104625000000.0,
+      "comm_seconds_per_step": 2.325,
+      "gpus": 16,
+      "link_gbps": 45.0,
+      "nodes": 2,
+      "stage": 1
+    },
+    "H100_N16_stage3": {
+      "breakeven_step_seconds_at_10pct_overhead": 34.875,
+      "comm_bytes_per_gpu_per_step": 156937500000.0,
+      "comm_seconds_per_step": 3.4875,
+      "gpus": 16,
+      "link_gbps": 45.0,
+      "nodes": 2,
+      "stage": 3
+    },
+    "H100_N64_stage1": {
+      "breakeven_step_seconds_at_10pct_overhead": 24.413,
+      "comm_bytes_per_gpu_per_step": 109856250000.0,
+      "comm_seconds_per_step": 2.4413,
+      "gpus": 64,
+      "link_gbps": 45.0,
+      "nodes": 8,
+      "stage": 1
+    },
+    "H100_N64_stage3": {
+      "breakeven_step_seconds_at_10pct_overhead": 36.619,
+      "comm_bytes_per_gpu_per_step": 164784375000.0,
+      "comm_seconds_per_step": 3.6619,
+      "gpus": 64,
+      "link_gbps": 45.0,
+      "nodes": 8,
+      "stage": 3
+    },
+    "H100_N8_stage1": {
+      "breakeven_step_seconds_at_10pct_overhead": 2.17,
+      "comm_bytes_per_gpu_per_step": 97650000000.0,
+      "comm_seconds_per_step": 0.217,
+      "gpus": 8,
+      "link_gbps": 450.0,
+      "nodes": 1,
+      "stage": 1
+    },
+    "H100_N8_stage3": {
+      "breakeven_step_seconds_at_10pct_overhead": 3.255,
+      "comm_bytes_per_gpu_per_step": 146475000000.0,
+      "comm_seconds_per_step": 0.3255,
+      "gpus": 8,
+      "link_gbps": 450.0,
+      "nodes": 1,
+      "stage": 3
+    }
+  },
+  "transcript_crosscheck": {
+    "dp_allreduce_gb_per_gpu": 111.6,
+    "infiniband_seconds": 2.48,
+    "note": "This is an independent confirmation of Psi. The 120 GB and 0.27 s figures were never used to fit Psi -- it came from the memory table -- yet the communication arithmetic lands on them too.",
+    "nvlink_seconds": 0.248,
+    "transcript_said_gb": 120,
+    "transcript_said_ib_seconds": 2.4,
+    "transcript_said_seconds": 0.27
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "corrections": [
+    {
+      "claim": "ZeRO-2 at N=8",
+      "computed_gb": 104.62,
+      "note": "2*Psi + 14*Psi/8 = 3.75*Psi",
+      "transcript": "not stated on the board"
+    },
+    {
+      "claim": "ZeRO-2 at N=64",
+      "computed_gb": 61.9,
+      "note": "72 does not satisfy any ZeRO-2 form for the Psi that fits the other five board numbers; 2*Psi + 14*Psi/64 = 62.1 GB. Most likely a 62 -> 72 transcription error.",
+      "transcript": "transcribed as 72"
+    }
+  ],
+  "deltas_vs_transcript": {
+    "64": {
+      "0": {
+        "abs_err": 0.6,
+        "computed": 446.4,
+        "transcript": 447
+      },
+      "1": {
+        "abs_err": 0.17,
+        "computed": 116.83,
+        "transcript": 117
+      },
+      "3": {
+        "abs_err": 0.03,
+        "computed": 6.97,
+        "transcript": 7
+      }
+    },
+    "8": {
+      "0": {
+        "abs_err": 0.6,
+        "computed": 446.4,
+        "transcript": 447
+      },
+      "1": {
+        "abs_err": 0.45,
+        "computed": 153.45,
+        "transcript": 153
+      },
+      "3": {
+        "abs_err": 0.8,
+        "computed": 55.8,
+        "transcript": 55
+      }
+    }
+  },
+  "k_adam": 12,
+  "recovered_psi": 27900000000.0,
+  "recovery_note": "Psi is not stated in the transcript. Solving the two clearly stated N=8 values (DP=16*Psi=447, ZeRO-3=2*Psi=55) gives Psi~=27.9e9. That single constant then independently reproduces the N=64 values (117 and 7) that were never used to fit it, which is what makes the recovery credible.",
+  "table": {
+    "16": {
+      "0": 446.4,
+      "1": 132.53,
+      "2": 80.21,
+      "3": 27.9
+    },
+    "32": {
+      "0": 446.4,
+      "1": 122.06,
+      "2": 68.01,
+      "3": 13.95
+    },
+    "64": {
+      "0": 446.4,
+      "1": 116.83,
+      "2": 61.9,
+      "3": 6.97
+    },
+    "8": {
+      "0": 446.4,
+      "1": 153.45,
+      "2": 104.62,
+      "3": 55.8
+    }
+  },
+  "transcript_values": {
+    "64": {
+      "0": 447,
+      "1": 117,
+      "2": null,
+      "3": 7
+    },
+    "8": {
+      "0": 447,
+      "1": 153,
+      "2": null,
+      "3": 55
+    }
+  }
+}

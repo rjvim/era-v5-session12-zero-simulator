@@ -1,0 +1,87 @@
+{
+  "d_model": 4096,
+  "n_layer": 32,
+  "note": "Read down a column: higher stage always costs throughput. Read across a row: higher stage is what makes the model fit at all. The rule that falls out is 'take the lowest stage that fits' -- there is never a reason to shard more than you have to.",
+  "rows": {
+    "1": {
+      "0": {
+        "fits_80gb": true,
+        "model_state_gb": 16.0,
+        "step_seconds": 0.129,
+        "tokens_per_second_per_gpu": 31760.2
+      },
+      "1": {
+        "fits_80gb": true,
+        "model_state_gb": 5.5,
+        "step_seconds": 0.129,
+        "tokens_per_second_per_gpu": 31760.2
+      },
+      "2": {
+        "fits_80gb": true,
+        "model_state_gb": 3.8,
+        "step_seconds": 0.129,
+        "tokens_per_second_per_gpu": 31760.2
+      },
+      "3": {
+        "fits_80gb": true,
+        "model_state_gb": 2.0,
+        "step_seconds": 0.1344,
+        "tokens_per_second_per_gpu": 30473.8
+      }
+    },
+    "3": {
+      "0": {
+        "fits_80gb": true,
+        "model_state_gb": 48.0,
+        "step_seconds": 0.255,
+        "tokens_per_second_per_gpu": 16065.4
+      },
+      "1": {
+        "fits_80gb": true,
+        "model_state_gb": 16.5,
+        "step_seconds": 0.255,
+        "tokens_per_second_per_gpu": 16065.4
+      },
+      "2": {
+        "fits_80gb": true,
+        "model_state_gb": 11.2,
+        "step_seconds": 0.255,
+        "tokens_per_second_per_gpu": 16065.4
+      },
+      "3": {
+        "fits_80gb": true,
+        "model_state_gb": 6.0,
+        "step_seconds": 0.2713,
+        "tokens_per_second_per_gpu": 15098.2
+      }
+    },
+    "7": {
+      "0": {
+        "fits_80gb": false,
+        "model_state_gb": 112.0,
+        "step_seconds": 0.5069,
+        "tokens_per_second_per_gpu": 8079.9
+      },
+      "1": {
+        "fits_80gb": true,
+        "model_state_gb": 38.5,
+        "step_seconds": 0.5069,
+        "tokens_per_second_per_gpu": 8079.9
+      },
+      "2": {
+        "fits_80gb": true,
+        "model_state_gb": 26.2,
+        "step_seconds": 0.5069,
+        "tokens_per_second_per_gpu": 8079.9
+      },
+      "3": {
+        "fits_80gb": true,
+        "model_state_gb": 14.0,
+        "step_seconds": 0.5451,
+        "tokens_per_second_per_gpu": 7514.9
+      }
+    }
+  },
+  "seq_len": 4096,
+  "tokens_per_gpu_per_step": 4096
+}

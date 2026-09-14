@@ -1,0 +1,43 @@
+{
+  "note": "Communication volume is flat across bucket sizes -- the same bytes cross the wire either way. What shrinks is the resident transient. Smaller buckets therefore cost nothing in volume and buy both lower peak memory and more opportunity to overlap the transfer with compute. The floor is latency: past some point you are issuing many tiny transfers and per-call overhead dominates.",
+  "params": 27072,
+  "sweep": {
+    "1": {
+      "bucket_bytes": 54144,
+      "bucket_elems": 27072,
+      "comm_bytes_per_gpu_per_step": 157356.0,
+      "peak_bytes_per_gpu": 137312
+    },
+    "16": {
+      "bucket_bytes": 3384,
+      "bucket_elems": 1692,
+      "comm_bytes_per_gpu_per_step": 157356.0,
+      "peak_bytes_per_gpu": 86552
+    },
+    "2": {
+      "bucket_bytes": 27072,
+      "bucket_elems": 13536,
+      "comm_bytes_per_gpu_per_step": 157356.0,
+      "peak_bytes_per_gpu": 110240
+    },
+    "32": {
+      "bucket_bytes": 1692,
+      "bucket_elems": 846,
+      "comm_bytes_per_gpu_per_step": 157356.0,
+      "peak_bytes_per_gpu": 84860
+    },
+    "4": {
+      "bucket_bytes": 13536,
+      "bucket_elems": 6768,
+      "comm_bytes_per_gpu_per_step": 157356.0,
+      "peak_bytes_per_gpu": 96704
+    },
+    "8": {
+      "bucket_bytes": 6768,
+      "bucket_elems": 3384,
+      "comm_bytes_per_gpu_per_step": 157356.0,
+      "peak_bytes_per_gpu": 89936
+    }
+  },
+  "world_size": 32
+}
