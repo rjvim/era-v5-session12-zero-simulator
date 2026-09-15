@@ -1,3 +1,4 @@
-# Optional: only needed to run validate_against_fsdp.py (see README 9b).
-# Requires CUDA. Not needed for the simulator, the tests, or the notebook.
-torch>=2.2
+# Optional: only needed for the validation scripts (README 9b).
+# validate_pytorch_all_stages.py and validate_fsdp_cpu.py run on CPU.
+# validate_against_fsdp.py additionally needs CUDA.
+torch>=2.6

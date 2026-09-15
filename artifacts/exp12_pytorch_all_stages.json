@@ -1,0 +1,170 @@
+{
+  "backend": "gloo (CPU)",
+  "world": 4,
+  "psi": 660736,
+  "memory_tolerance_pct": 5.0,
+  "comm_ratio_tolerance": 0.25,
+  "what_is_measured": "Per-rank LOCAL element counts vs the ledger, and REAL collective bytes via wrapped torch.distributed calls. Not allocator peak, not activations.",
+  "stages": {
+    "0": {
+      "implementation": "DDP + AdamW",
+      "measured": {
+        "param_elems_local": 660736,
+        "grad_elems_local": 660736,
+        "optim_moment_elems_local": 1321472
+      },
+      "predicted": {
+        "param_elems_local": 660736,
+        "grad_elems_local": 660736,
+        "optim_moment_elems_local": 1321472
+      },
+      "relative_error": {
+        "params": 0.0,
+        "grads": 0.0,
+        "moments": 0.0
+      },
+      "rows_not_comparable": [],
+      "not_comparable_reason": null,
+      "within_tolerance": true,
+      "comm_wire_bytes_per_gpu": 3964416.0,
+      "comm_in_psi_units": 1.5,
+      "comm_calls": {
+        "c10d.allreduce_": 2
+      },
+      "losses": [
+        5.750703811645508,
+        5.0955586433410645,
+        4.496413230895996,
+        3.9653375148773193
+      ]
+    },
+    "1": {
+      "implementation": "DDP + ZeroRedundancyOptimizer",
+      "measured": {
+        "param_elems_local": 660736,
+        "grad_elems_local": 660736,
+        "optim_moment_elems_local": 330496
+      },
+      "predicted": {
+        "param_elems_local": 660736,
+        "grad_elems_local": 660736,
+        "optim_moment_elems_local": 330368.0
+      },
+      "relative_error": {
+        "params": 0.0,
+        "grads": 0.0,
+        "moments": 0.00039
+      },
+      "rows_not_comparable": [],
+      "not_comparable_reason": null,
+      "within_tolerance": true,
+      "comm_wire_bytes_per_gpu": 3964416.0,
+      "comm_in_psi_units": 1.5,
+      "comm_calls": {
+        "c10d.allreduce_": 2
+      },
+      "losses": [
+        5.750703811645508,
+        5.0955586433410645,
+        4.496413230895996,
+        3.9653375148773193
+      ]
+    },
+    "2": {
+      "implementation": "FSDP2 reshard_after_forward=False",
+      "measured": {
+        "param_elems_local": 165184,
+        "grad_elems_local": 165184,
+        "optim_moment_elems_local": 330368
+      },
+      "predicted": {
+        "param_elems_local": 660736,
+        "grad_elems_local": 165184.0,
+        "optim_moment_elems_local": 330368.0
+      },
+      "relative_error": {
+        "params": 0.75,
+        "grads": 0.0,
+        "moments": 0.0
+      },
+      "rows_not_comparable": [
+        "params"
+      ],
+      "not_comparable_reason": "DeepSpeed ZeRO-2 replicates parameters; FSDP2 always shards persistent parameter storage and only retains the gathered copy between forward and backward. Measured error is exactly 1 - 1/N, the signature of that mapping difference. FSDP2 (reshard=False) = ZeRO-2 communication + ZeRO-3 parameter memory.",
+      "within_tolerance": true,
+      "comm_wire_bytes_per_gpu": 3964416.0,
+      "comm_in_psi_units": 1.5,
+      "comm_calls": {
+        "(local) fsdp.all_gather_copy_in": 5,
+        "c10d._allgather_base_": 5,
+        "(local) fsdp.split_with_sizes_copy": 5,
+        "(local) fsdp.chunk_cat": 5,
+        "c10d._reduce_scatter_base_": 5
+      },
+      "losses": [
+        5.750703811645508,
+        5.095558166503906,
+        4.496413230895996,
+        3.9653372764587402
+      ]
+    },
+    "3": {
+      "implementation": "FSDP2 reshard_after_forward=True",
+      "measured": {
+        "param_elems_local": 165184,
+        "grad_elems_local": 165184,
+        "optim_moment_elems_local": 330368
+      },
+      "predicted": {
+        "param_elems_local": 165184.0,
+        "grad_elems_local": 165184.0,
+        "optim_moment_elems_local": 330368.0
+      },
+      "relative_error": {
+        "params": 0.0,
+        "grads": 0.0,
+        "moments": 0.0
+      },
+      "rows_not_comparable": [],
+      "not_comparable_reason": null,
+      "within_tolerance": true,
+      "comm_wire_bytes_per_gpu": 5946624.0,
+      "comm_in_psi_units": 2.25,
+      "comm_calls": {
+        "(local) fsdp.all_gather_copy_in": 10,
+        "c10d._allgather_base_": 10,
+        "(local) fsdp.split_with_sizes_copy": 10,
+        "(local) fsdp.chunk_cat": 5,
+        "c10d._reduce_scatter_base_": 5
+      },
+      "losses": [
+        5.750703811645508,
+        5.095558166503906,
+        4.496413230895996,
+        3.9653372764587402
+      ]
+    }
+  },
+  "loss_agreement_vs_dp": {
+    "0": 0.0,
+    "1": 0.0,
+    "2": 4.76837158203125e-07,
+    "3": 4.76837158203125e-07
+  },
+  "zero3_over_zero2_comm_ratio": {
+    "zero2_wire_bytes": 3964416.0,
+    "zero3_wire_bytes": 5946624.0,
+    "ratio": 1.5,
+    "predicted": 1.5,
+    "within_tolerance": true,
+    "note": "Direct test of the 1.5x claim. ZeRO-3 reshards after the forward pass, so the backward must all-gather the weights again. If PyTorch did not actually do that, this would come out near 1.0."
+  },
+  "zero2_over_dp_comm_ratio": {
+    "dp_wire_bytes": 3964416.0,
+    "zero2_wire_bytes": 3964416.0,
+    "ratio": 1.0,
+    "predicted": 1.0,
+    "within_tolerance": true
+  },
+  "all_memory_within_tolerance": true
+}

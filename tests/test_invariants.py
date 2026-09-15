@@ -157,7 +157,9 @@ NUMBERS_IN_README = [
     "31,760", "16,065", "0.94", "33.55", "4.29",
     "502,784", "188,072", "135,620", "84,860", "5.92", "69,632",
     "255.6", "311.4", "702.0", "409.0", "360.2", "82%",
-    "858,880", "1,717,760", "429,568", "429,440", "0.0003", "0.03%",
+    # exp12 (supersedes exp11's ZeRO-1-only run as the quoted result)
+    "660,736", "1,321,472", "330,496", "330,368", "165,184",
+    "3,964,416", "5,946,624", "2.25", "1.667", "1.8", "4.8e-07",
 ]
 
 
@@ -416,7 +418,9 @@ def test_readme_does_not_claim_pytorch_lacks_zero1():
     with open(README) as f:
         s = f.read()
     assert "ZeroRedundancyOptimizer" in s
-    assert "no ZeRO-1 equivalent" not in s or "That was wrong" in s
+    # If the false claim appears at all, it must appear only as a correction.
+    if "no ZeRO-1 equivalent" in s:
+        assert "**Wrong**" in s or "That was wrong" in s
 
 
 def test_gpu_harness_still_honestly_marked_unrun():
@@ -456,3 +460,58 @@ def test_notebook_builder_anchors_still_resolve():
     src = open(os.path.join(ROOT, "tools", "build_notebook.py")).read()
     for marker in ("## 8b", "### 3b", "## 9 "):
         assert marker in src, f"builder lost section {marker!r}"
+
+
+# ------------------------------------- all-stage validation against PyTorch
+def test_all_four_stages_validated_against_pytorch():
+    a = art("exp12_pytorch_all_stages.json")
+    assert a["world"] == 4 and a["psi"] == 660736
+    assert a["all_memory_within_tolerance"] is True
+    assert set(a["stages"]) == {"0", "1", "2", "3"}
+
+
+def test_measured_comm_matches_ring_formulas():
+    """The headline external check: 2Psi vs 3Psi, measured on real FSDP2."""
+    a = art("exp12_pytorch_all_stages.json")
+    n = a["world"]
+    ring = (n - 1) / n
+    st = a["stages"]
+    for s in ("0", "1", "2"):
+        assert st[s]["comm_in_psi_units"] == pytest.approx(2 * ring, abs=0.02), \
+            f"stage {s} should move 2*Psi*(N-1)/N"
+    assert st["3"]["comm_in_psi_units"] == pytest.approx(3 * ring, abs=0.02)
+
+
+def test_measured_zero3_ratio_is_exactly_1_5():
+    r = art("exp12_pytorch_all_stages.json")["zero3_over_zero2_comm_ratio"]
+    assert r["ratio"] == pytest.approx(1.5, abs=0.01)
+    assert r["within_tolerance"] is True
+    # tolerance must not have been loosened to make this pass
+    assert art("exp12_pytorch_all_stages.json")["comm_ratio_tolerance"] == 0.25
+
+
+def test_measured_zero2_equals_dp_on_the_wire():
+    r = art("exp12_pytorch_all_stages.json")["zero2_over_dp_comm_ratio"]
+    assert r["ratio"] == pytest.approx(1.0, abs=0.01)
+
+
+def test_zero3_doubles_the_allgather_count():
+    """Direct evidence FSDP2 re-gathers weights in the backward pass."""
+    st = art("exp12_pytorch_all_stages.json")["stages"]
+    def ag(s):
+        return sum(v for k, v in st[s]["comm_calls"].items()
+                   if "allgather" in k.lower() and not k.startswith("(local)"))
+    assert ag("3") == 2 * ag("2"), f"ZeRO-2 {ag('2')} vs ZeRO-3 {ag('3')}"
+
+
+def test_stage2_param_row_marked_not_comparable():
+    """FSDP2 is not DeepSpeed ZeRO-2 on parameter memory; that must be flagged
+    rather than passed off or silently tolerated."""
+    st = art("exp12_pytorch_all_stages.json")["stages"]
+    assert st["2"]["rows_not_comparable"] == ["params"]
+    assert st["2"]["not_comparable_reason"]
+    n = art("exp12_pytorch_all_stages.json")["world"]
+    # the discrepancy must be exactly 1 - 1/N, the signature of the difference
+    assert st["2"]["relative_error"]["params"] == pytest.approx(1 - 1 / n, abs=0.01)
+    for s in ("0", "1", "3"):
+        assert st[s]["rows_not_comparable"] == []

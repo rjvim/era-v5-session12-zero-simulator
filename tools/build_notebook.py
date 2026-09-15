@@ -563,64 +563,91 @@ The open questions from the session, with what this simulation says:
 """),
 
 md("""
-## 8b · Validating against a real ZeRO implementation
+## 8b · Validating against real PyTorch — all four stages
 
-Everything above checks my simulator against the ZeRO **paper\'s arithmetic**
-and the lecture whiteboard. Both are checks against formulas. I wanted one
-check against a *running* implementation.
+Everything above checks my simulator against formulas: the ZeRO paper\'s
+arithmetic, and the lecture whiteboard. This section checks it against
+*running implementations*, and it is actually executed.
 
-**ZeRO-1: done, and it passes.**
-`torch.distributed.optim.ZeroRedundancyOptimizer` is PyTorch\'s own ZeRO-1 and
-runs on the gloo/CPU backend, so `validate_fsdp_cpu.py` was actually executed
-and its output is committed.
+| Stage | Real implementation |
+| --- | --- |
+| DP | `DistributedDataParallel` + AdamW |
+| ZeRO-1 | DDP + `ZeroRedundancyOptimizer` |
+| ZeRO-2 | FSDP2 `fully_shard(reshard_after_forward=False)` |
+| ZeRO-3 | FSDP2 `fully_shard(reshard_after_forward=True)` |
+
+FSDP**1** refuses to initialise without a GPU. FSDP**2** is DTensor-based and
+runs on a CPU device mesh — that is what made stages 2 and 3 checkable here.
 """),
 
 code("""
 import json
-v = json.load(open('artifacts/exp11_fsdp_cpu_validation.json'))
-print(f"Psi={v['psi']:,}  world={v['world']}  backend={v['backend']}")
+v = json.load(open('artifacts/exp12_pytorch_all_stages.json'))
+n = v['world']; ring = (n-1)/n
+print(f"Psi={v['psi']:,}  world={n}  {v['backend']}\\n")
 for s, d in sorted(v['stages'].items()):
-    m, p = d['measured'], d['predicted']
-    print(f"  {d['implementation']:>31s}: "
-          f"params {m['param_elems']:>8,}  grads {m['grad_elems']:>8,}  "
-          f"moments {m['optim_moment_elems']:>9,} "
-          f"(pred {p['optim_moment_elems']:>9,.0f})  "
-          f"max err {max(d['relative_error'].values()):.4f}")
+    m = d['measured']
+    nc = '  <- params not comparable' if d['rows_not_comparable'] else ''
+    print(f"  {d['implementation']:>36s}  "
+          f"p{m['param_elems_local']:>8,} g{m['grad_elems_local']:>8,} "
+          f"o{m['optim_moment_elems_local']:>9,}  "
+          f"wire {d['comm_in_psi_units']:.2f}xPsi{nc}")
 print()
-print('loss agreement vs plain DDP:', v['loss_agreement_vs_no_shard'])
-print('all within 2%:', v['all_within_tolerance'])
+print(f"predicted wire: stages 0-2 = 2*Psi*(N-1)/N = {2*ring:.2f}xPsi, "
+      f"stage 3 = 3*Psi*(N-1)/N = {3*ring:.2f}xPsi")
+print('ZeRO-3/ZeRO-2 ratio:', v['zero3_over_zero2_comm_ratio']['ratio'],
+      '(predicted 1.5)')
+print('ZeRO-2/DP ratio    :', v['zero2_over_dp_comm_ratio']['ratio'],
+      '(predicted 1.0)')
+print('loss agreement vs DP:', v['loss_agreement_vs_dp'])
 """),
 
 md("""
-Two separate results there.
+**ZeRO-3 / ZeRO-2 communication: exactly 1.5**, at both N=2 and N=4. This is
+the strongest external check in the whole project. The 1.5x is not assumed
+anywhere in my code — it falls out of the ring costs in `fabric.py` — and real
+FSDP2 reproduces it because `reshard_after_forward=True` genuinely frees the
+gathered weights after the forward pass, forcing the backward to all-gather
+again. The call counts show it outright: **5 all-gathers for ZeRO-2, 10 for
+ZeRO-3**, with 5 reduce-scatters either way.
 
-**The ledger is right.** Real ZeRO-1 holds full parameters, full gradients and
-a quarter of the Adam moments on 4 ranks — exactly what the table in section 1
-predicts, with zero error on params and grads.
+**DP = ZeRO-1 = ZeRO-2 on the wire**, measured. That is section 7b(a)\'s claim,
+now confirmed externally rather than resting on my own implementation.
 
-**Stage-invariance, confirmed externally.** Loss agreement with plain DDP is
-**exactly 0.0**. My central claim now rests on PyTorch\'s implementation as
-well as on my own code, which is a much better place for it to rest.
+Loss agreement is exactly 0.0 for ZeRO-1 and 4.8e-07 for stages 2-3 — fp32
+summation is not associative and FSDP2 reduces in a different order. My
+simulator gets exactly zero because it runs float64 with a fixed reduction
+order.
+"""),
 
-The 0.03% gap on moments is informative rather than noise: **real ZeRO-1 shards
-at parameter granularity, not element granularity.** It assigns whole tensors
-to ranks greedily, so its shards come out slightly uneven. My flat vector
-splits at exact element boundaries. Small, real, and recorded in limitations
-rather than rounded away.
+md("""
+### Two things this found
 
-**ZeRO-2 and ZeRO-3: not validated.** FSDP is the equivalent for those, and it
-refuses to initialise without a GPU — *"FSDP needs a non-CPU accelerator
-device"*. There is no GPU on this machine. `validate_against_fsdp.py` is the
-harness, ready for Colab, and it is **unrun with no committed output** —
-fabricating numbers would be worse than an admitted gap. Its tolerance is
-written into the script before running so it cannot be moved afterwards.
+**My instrument was wrong twice before it was right, and I did not move the
+tolerance.** I pre-registered "ratio within 0.25 of 1.5" in the script before
+running it. The first attempt read **1.8** — I was counting
+`fsdp.all_gather_copy_in`, a *local staging copy*, as network traffic, since
+FSDP2 issues every all-gather as that helper plus the real
+`c10d._allgather_base_`. The second read **1.667** — for reduce-scatter I was
+sizing the returned *already-scattered* slice instead of the full buffer being
+reduced, a 2x undercount. Both were bugs in my measurement. Fixing them gave
+exactly 1.5.
 
-**And a claim this corrected.** An earlier draft of my README said PyTorch has
-no ZeRO-1 equivalent and that stage 1 needs DeepSpeed, and used that to
-support section 7b(a). Wrong — `ZeroRedundancyOptimizer` is exactly it. That
-argument stands on its own measured evidence (identical communication), but it
-lost a piece of corroboration it was never entitled to. Going looking for
-something runnable is what caught it.
+**FSDP2 `reshard_after_forward=False` is not DeepSpeed ZeRO-2.** DeepSpeed
+ZeRO-2 keeps parameters fully *replicated* and shards only gradients and
+optimizer state. FSDP2 always shards persistent parameter storage;
+`reshard_after_forward=False` just retains the gathered copy between forward
+and backward to skip the re-gather. So it has **ZeRO-2\'s communication with
+ZeRO-3\'s parameter memory**. The measured gap is exactly `1 - 1/N` (0.75 at
+N=4), which is the signature of that mapping difference rather than a
+shard-math bug — so it is reported as a not-comparable row, not as a pass and
+not as a failure of my ledger.
+
+**Still unvalidated:** absolute allocator peak, communication buffers,
+fragmentation and activation memory. Those need a GPU;
+`validate_against_fsdp.py` is the unrun harness. Its scope is narrower now —
+the sharding arithmetic and communication volumes are settled above, so what
+remains is allocator behaviour, which limitation 1 never claimed to predict.
 """),
 
 md("""
