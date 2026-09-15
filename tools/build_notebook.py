@@ -258,9 +258,10 @@ print('Realistic: Psi=27.9B, 64L, d=7168, seq=8192, N=8, NO checkpointing')
 for s in '0123':
     v = floor['realistic'][s]
     print(f"  {STAGE_NAME[int(s)]:14s} states {v['model_state_gb']:>6.1f} GB "
-          f"+ acts {v['activation_gb_no_checkpointing']:>6.1f} GB "
+          f"+ acts {v['activation_gb_corrected']:>6.1f} GB "
+          f"(rule of thumb said {v['activation_gb_rule_of_thumb']:>6.1f}) "
           f"= {v['total_gb']:>6.1f} GB  "
-          f"{'FITS' if v['total_gb'] <= 80 else 'does NOT fit 80GB'}")
+          f"{'FITS' if v['fits_80gb'] else 'does NOT fit 80GB'}")
 """),
 
 md("""
