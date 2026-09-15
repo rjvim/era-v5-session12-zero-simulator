@@ -298,3 +298,38 @@ def test_artifacts_are_reproducible():
 
     for n in before:
         assert strip(before[n]) == strip(after[n]), f"{n} is not reproducible"
+
+
+def test_requirements_covers_every_third_party_import():
+    """A fresh clone must be able to follow the README without failing.
+
+    This exists because it did not: matplotlib and nbformat were both in use
+    and absent from requirements.txt, so `pip install -r requirements.txt`
+    followed by `pytest` would have crashed on someone else's machine.
+    """
+    import pathlib
+    import re
+    import sys
+
+    stdlib = set(sys.stdlib_module_names)
+    declared = set()
+    for req in ("requirements.txt", "requirements-validation.txt"):
+        for line in open(os.path.join(ROOT, req)):
+            line = line.split("#")[0].strip()
+            if line:
+                declared.add(re.split(r"[<>=!\[]", line)[0].strip().lower())
+
+    used = set()
+    pat = re.compile(r"^\s*(?:import|from)\s+([A-Za-z_][A-Za-z_0-9]*)")
+    for f in pathlib.Path(ROOT).rglob("*.py"):
+        if ".git" in f.parts:
+            continue
+        for line in f.read_text().splitlines():
+            m = pat.match(line)
+            if m:
+                used.add(m.group(1).lower())
+
+    third_party = {m for m in used
+                   if m not in stdlib and m != "zerosim" and not m.startswith("_")}
+    missing = third_party - declared
+    assert not missing, f"used but not in requirements.txt: {sorted(missing)}"

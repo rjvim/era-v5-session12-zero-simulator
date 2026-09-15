@@ -4,9 +4,9 @@
 ZeRO-1/2/3, show how memory and computation change.
 
 ```
-pip install -r requirements.txt
+pip install -r requirements.txt   # numpy, matplotlib, pytest, nbformat
 python run_experiments.py       # regenerates every artifact
-python -m pytest tests/ -q      # 52 tests
+python -m pytest tests/ -q      # 53 tests
 jupyter notebook notebook.ipynb # narrated walkthrough, figures + outputs committed
 ```
 
@@ -331,8 +331,9 @@ zerosim/engine.py        stages 0-3, actually executed
 zerosim/data.py          syllable-level mantra corpus
 run_experiments.py       regenerates artifacts/ (9 experiments)
 tools/build_notebook.py  regenerates notebook.ipynb
+requirements.txt         core deps; -validation.txt is torch, for 9b only
 validate_against_fsdp.py checks the ledger against real PyTorch FSDP (see 9b)
-tests/                   52 tests
+tests/                   53 tests
 notebook.ipynb           narrated walkthrough, 3 figures, outputs committed
 ```
 
