@@ -1,0 +1,67 @@
+{
+  "backend": "gloo (CPU), fp32",
+  "world": 2,
+  "psi": 858880,
+  "peak_ratio_tolerance_pct": 25.0,
+  "how_peak_is_measured": "TorchDispatchMode registers every tensor storage; weakref.finalize decrements on free; peak of the running total. The CPU analogue of torch.cuda.max_memory_allocated().",
+  "how_activations_are_isolated": "peak(forward with grad) - peak(forward under no_grad). The difference is what is retained for the backward pass.",
+  "caveat": "This run is fp32 throughout; the simulator models mixed precision (fp16 params/grads, fp32 optimizer). So ABSOLUTE bytes are not comparable and only stage-to-stage RATIOS are.",
+  "stages": {
+    "0": {
+      "implementation": "DDP + AdamW",
+      "measured_resident_bytes": 13742080,
+      "measured_peak_step_bytes": 31183572,
+      "measured_activation_bytes": 3884032,
+      "measured_peak_reduction_vs_dp": 1.0,
+      "simulator_model_state_reduction_vs_dp": 1.0,
+      "relative_error_on_reduction": 0.0,
+      "within_tolerance": true
+    },
+    "1": {
+      "implementation": "DDP + ZeroRedundancyOptimizer",
+      "measured_resident_bytes": 10306560,
+      "measured_peak_step_bytes": 24191016,
+      "measured_activation_bytes": 3884032,
+      "measured_peak_reduction_vs_dp": 1.289,
+      "simulator_model_state_reduction_vs_dp": 1.6,
+      "relative_error_on_reduction": 0.1943,
+      "within_tolerance": true
+    },
+    "2": {
+      "implementation": "FSDP2 reshard=False",
+      "measured_resident_bytes": 6871040,
+      "measured_peak_step_bytes": 17310164,
+      "measured_activation_bytes": 4835840,
+      "measured_peak_reduction_vs_dp": 1.801,
+      "simulator_model_state_reduction_vs_dp": 1.778,
+      "relative_error_on_reduction": 0.0133,
+      "within_tolerance": true
+    },
+    "3": {
+      "implementation": "FSDP2 reshard=True",
+      "measured_resident_bytes": 6871040,
+      "measured_peak_step_bytes": 17180116,
+      "measured_activation_bytes": 3746816,
+      "measured_peak_reduction_vs_dp": 1.815,
+      "simulator_model_state_reduction_vs_dp": 2.0,
+      "relative_error_on_reduction": 0.0925,
+      "within_tolerance": true
+    }
+  },
+  "activation_rule_of_thumb": {
+    "formula": "34 * B * T * d * n_layer * bytes",
+    "estimate_bytes": 8912896,
+    "measured_bytes_ddp": 3884032,
+    "measured_over_estimate": 0.436,
+    "identical_across_ddp_stages": true,
+    "per_stage_retained_bytes": {
+      "0": 3884032,
+      "1": 3884032,
+      "2": 4835840,
+      "3": 3746816
+    },
+    "why_fsdp_stages_differ": "The FSDP numbers are NOT evidence that activations differ by stage. My measurement is peak(forward with grad) - peak(forward under no_grad), which captures everything retained for the backward pass -- and under reshard_after_forward=False the GATHERED PARAMETERS are deliberately retained too, while reshard=True frees them. So ZeRO-2 retains more than DP and ZeRO-3 retains less, which is the transient side of the same memory/communication trade. Activations proper are unsharded by ZeRO; stages 0 and 1 are the clean comparison for that.",
+    "note": "No pass/fail on the rule of thumb, on purpose -- I want the number, not a verdict against a threshold I chose myself."
+  },
+  "all_peak_ratios_within_tolerance": true
+}

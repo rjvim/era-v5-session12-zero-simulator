@@ -651,6 +651,66 @@ remains is allocator behaviour, which limitation 1 never claimed to predict.
 """),
 
 md("""
+## 8c · Memory, measured rather than modelled
+
+Limitation 1 says memory here is *modelled*. True of the simulator, but
+checkable — and "no CUDA" is not a reason to leave it unchecked. There is no
+`torch.cpu.max_memory_allocated()`, so I built one: a `TorchDispatchMode`
+registers every tensor storage, `weakref.finalize` decrements on free, and the
+running total gives a true peak of live tensor bytes. Same quantity CUDA\'s
+allocator reports, measured on CPU.
+"""),
+
+code("""
+import json
+v = json.load(open('artifacts/exp13_measured_memory.json'))
+print(f"Psi={v['psi']:,}  world={v['world']}  {v['backend']}\\n")
+for s, d in sorted(v['stages'].items()):
+    print(f"  {d['implementation']:>32s}  resident {d['measured_resident_bytes']:>11,}  "
+          f"MEASURED peak {d['measured_peak_step_bytes']:>11,}  "
+          f"peak red {d['measured_peak_reduction_vs_dp']:.2f}x "
+          f"(ledger {d['simulator_model_state_reduction_vs_dp']:.2f}x)")
+a = v['activation_rule_of_thumb']
+print()
+print('retained-for-backward bytes per stage:', a['per_stage_retained_bytes'])
+print(f"activations (DDP clean read) {a['measured_bytes_ddp']:,} B vs "
+      f"34*B*T*d*L estimate {a['estimate_bytes']:,} B -> "
+      f"{a['measured_over_estimate']}x")
+print('identical across the two DDP stages:', a['identical_across_ddp_stages'])
+"""),
+
+md("""
+Three results.
+
+**Peak ratios track the ledger** — all within the 25% I fixed beforehand. And
+measured peak reduction runs *below* the ledger\'s model-state reduction at
+stages 1 and 3, which is exactly the section 3b activation-floor effect showing
+up in a real allocator instead of in my own accounting.
+
+**Activations are byte-identical across the two DDP stages** (3,884,032 B).
+That is section 3b\'s claim — ZeRO does not shard activations — measured rather
+than asserted.
+
+The FSDP rows are *not* evidence that activations differ by stage. My measure
+captures everything retained for the backward pass, and
+`reshard_after_forward=False` deliberately retains the **gathered parameters**
+too, while `reshard=True` frees them. So ZeRO-2 retains ~950 KB more than DP
+and ZeRO-3 ~140 KB less — the transient side of the same trade, in bytes.
+
+**It corrected my own activation estimate.** Measured 0.436x of the
+`34*B*T*d*L` rule, so **the rule overestimates by ~2.3x** — flash-style
+`scaled_dot_product_attention` never materialises the T x T attention matrix
+that the coefficient 34 assumes. My first attempt read 0.31x using a probe
+model with *no attention*, which said nothing about the rule and everything
+about an architecture mismatch; I gave the probe real attention and re-ran.
+
+Section 3b carries the corrected figures: activations ~111.4 GB rather than
+255.6, totals 557.8 / 264.8 / 216.0 / 167.2 GB. **The conclusion is
+unchanged** — nothing fits an 80 GB card — but the number was biased high and
+now says so.
+"""),
+
+md("""
 ## 9 · Limitations
 
 See README §8 for the full list. The ones that matter most for reading these

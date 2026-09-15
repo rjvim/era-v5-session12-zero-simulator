@@ -160,6 +160,9 @@ NUMBERS_IN_README = [
     # exp12 (supersedes exp11's ZeRO-1-only run as the quoted result)
     "660,736", "1,321,472", "330,496", "330,368", "165,184",
     "3,964,416", "5,946,624", "2.25", "1.667", "1.8", "4.8e-07",
+    # exp13 measured memory
+    "31,183,572", "17,310,164", "17,180,116", "3,884,032", "4,835,840",
+    "3,746,816", "0.436", "111.4", "167.2", "557.8", "216.0", "264.8",
 ]
 
 
@@ -515,3 +518,61 @@ def test_stage2_param_row_marked_not_comparable():
     assert st["2"]["relative_error"]["params"] == pytest.approx(1 - 1 / n, abs=0.01)
     for s in ("0", "1", "3"):
         assert st[s]["rows_not_comparable"] == []
+
+
+# ------------------------------------------- measured (not modelled) memory
+def test_measured_memory_was_actually_run():
+    a = art("exp13_measured_memory.json")
+    assert a["psi"] == 858880 and a["world"] == 2
+    assert a["all_peak_ratios_within_tolerance"] is True
+    assert a["peak_ratio_tolerance_pct"] == 25.0
+
+
+def test_measured_peak_ratios_track_the_ledger():
+    st = art("exp13_measured_memory.json")["stages"]
+    assert st["0"]["measured_peak_step_bytes"] == 31183572
+    assert st["2"]["measured_peak_reduction_vs_dp"] == pytest.approx(1.80, abs=0.01)
+    assert st["3"]["measured_peak_reduction_vs_dp"] == pytest.approx(1.81, abs=0.01)
+    for s in st.values():
+        assert s["relative_error_on_reduction"] <= 0.25
+
+
+def test_measured_peak_reduction_is_below_model_state_reduction():
+    """The activation floor, showing up in a real allocator rather than in my
+    own accounting."""
+    st = art("exp13_measured_memory.json")["stages"]
+    for s in ("1", "3"):
+        assert (st[s]["measured_peak_reduction_vs_dp"]
+                < st[s]["simulator_model_state_reduction_vs_dp"])
+
+
+def test_activations_measured_identical_across_ddp_stages():
+    """Section 3b's claim that ZeRO does not shard activations, measured.
+    Stages 0/1 are the clean read: both DDP, no gathered params retained."""
+    a = art("exp13_measured_memory.json")["activation_rule_of_thumb"]
+    assert a["identical_across_ddp_stages"] is True
+    assert a["measured_bytes_ddp"] == 3884032
+
+
+def test_fsdp_retained_bytes_reflect_resharding():
+    """ZeRO-2 retains gathered params across fwd/bwd; ZeRO-3 frees them."""
+    r = art("exp13_measured_memory.json")["activation_rule_of_thumb"]["per_stage_retained_bytes"]
+    assert r["2"] > r["0"], "reshard=False should retain MORE than DP"
+    assert r["3"] < r["0"], "reshard=True should retain LESS than DP"
+
+
+def test_activation_rule_of_thumb_bias_is_recorded():
+    """The 34*B*T*d rule overestimates; that must be stated, not buried."""
+    a = art("exp13_measured_memory.json")["activation_rule_of_thumb"]
+    assert a["measured_over_estimate"] == pytest.approx(0.436, abs=0.01)
+    with open(README) as f:
+        s = f.read()
+    assert "2.3" in s and "overestimate" in s.lower()
+
+
+def test_readme_3b_carries_the_corrected_activation_figures():
+    """The corrected numbers must appear, and the conclusion must still hold."""
+    with open(README) as f:
+        s = f.read()
+    for n in ("111.4", "167.2", "557.8"):
+        assert n in s, f"corrected figure {n} missing from README"

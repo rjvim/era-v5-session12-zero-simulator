@@ -6,7 +6,7 @@ ZeRO-1/2/3, show how memory and computation change.
 ```
 pip install -r requirements.txt   # numpy, matplotlib, pytest, nbformat
 python run_experiments.py       # regenerates every artifact
-python -m pytest tests/ -q      # 70 tests
+python -m pytest tests/ -q      # 77 tests
 jupyter notebook notebook.ipynb # narrated walkthrough, figures + outputs committed
 ```
 
@@ -155,8 +155,18 @@ seq = 8192, batch 1 per GPU, N=8, **no activation checkpointing**:
 | ZeRO-2 | 104.6 GB | 255.6 GB | 360.2 GB | ✗ |
 | ZeRO-3 | 55.8 GB | 255.6 GB | **311.4 GB** | **✗** |
 
-**Nothing fits.** Activations alone are 255.6 GB — more than three 80 GB cards
-— and sharding model states 32× is almost beside the point next to that.
+**Nothing fits.** Activations alone dominate — and sharding model states 32×
+is almost beside the point next to that.
+
+**Correction, from the measurement in §9c.** The 255.6 GB above uses the
+`34·B·T·d` rule of thumb, and I later measured that rule against real
+activations: **it overestimates by about 2.3×**, because
+`scaled_dot_product_attention` is flash-style and never materialises the T×T
+attention matrix that the coefficient 34 assumes. Scaling by the measured
+0.436 gives **≈111.4 GB**, so the corrected totals are 557.8 / 264.8 / 216.0 /
+**167.2 GB**. The conclusion is unchanged — nothing fits an 80 GB card — but
+the table above is biased high by roughly 2.3× and should be read as an upper
+bound, which is what §10.6 now says.
 
 This changes a claim I make later in §4 and I want to flag it here rather than
 let the two sections quietly contradict each other: when I say "ZeRO-3 is the
@@ -378,12 +388,13 @@ zerosim/plots.py         the four figures
 zerosim/engine.py        stages 0-3, actually executed
 zerosim/data.py          syllable-level mantra corpus
 run_experiments.py       regenerates artifacts/ (10 experiments)
-validate_pytorch_all_stages.py  RUN: all 4 stages vs DDP/ZeRO-1/FSDP2 (see 9b)
+validate_pytorch_all_stages.py  RUN: all 4 stages vs DDP/ZeRO-1/FSDP2 (9b)
+validate_measured_memory.py     RUN: real peak + real activations (9c)
 validate_fsdp_cpu.py     RUN: earlier ZeRO-1-only check
 tools/build_notebook.py  regenerates notebook.ipynb
 requirements.txt         core deps; -validation.txt is torch, for 9b only
 validate_against_fsdp.py UNRUN: needs a GPU, for ZeRO-2/3 (see 9b)
-tests/                   70 tests
+tests/                   77 tests
 notebook.ipynb           narrated walkthrough, 4 figures, outputs committed
 ```
 
@@ -486,6 +497,61 @@ exactly `1 − 1/N` (0.50 at N=2, 0.75 at N=4), which is the signature of that
 mapping difference rather than a shard-math bug — and it is why I report it as
 a mapping caveat instead of either a pass or a failure of my ledger.
 
+### 9c. Memory, measured rather than modelled
+
+Limitation 1 said memory here is *modelled*. That is the honest description of
+a simulator, but it is checkable without a GPU, and "no CUDA" is not a reason
+to leave it unchecked. There is no `torch.cpu.max_memory_allocated()`, so I
+built one: a `TorchDispatchMode` registers every tensor storage,
+`weakref.finalize` decrements on free, and the running total gives a true peak
+of live tensor bytes — the same quantity CUDA's allocator reports, measured on
+CPU. Committed to `artifacts/exp13_measured_memory.json`.
+
+Ψ = 858,880, 2 gloo ranks, fp32 throughout (so only *ratios* are comparable —
+the simulator models mixed precision):
+
+| Stage | Resident | **Measured peak** | Measured peak red. | Ledger red. | Err |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| DP | 13,742,080 | 31,183,572 | 1.00× | 1.00× | 0.000 |
+| ZeRO-1 | 10,306,560 | 24,191,016 | 1.29× | 1.60× | 0.194 |
+| ZeRO-2 | 6,871,040 | 17,310,164 | 1.80× | 1.78× | 0.013 |
+| ZeRO-3 | 6,871,040 | 17,180,116 | 1.81× | 2.00× | 0.092 |
+
+All within the 25% I fixed beforehand. Measured peak reduction runs *below*
+the ledger's model-state reduction at stages 1 and 3 — which is exactly the
+§3b activation-floor effect showing up in a real allocator rather than in my
+own accounting.
+
+**Activations, isolated properly.** `peak(forward with grad) − peak(forward
+under no_grad)` gives what is retained for the backward pass:
+
+| Stage | Retained bytes |
+| --- | ---: |
+| DP | 3,884,032 |
+| ZeRO-1 | 3,884,032 |
+| ZeRO-2 | 4,835,840 |
+| ZeRO-3 | 3,746,816 |
+
+Stages 0 and 1 are the clean read — both DDP, nothing parameter-shaped gathered
+or freed around the forward — and they are **byte-identical**, which is §3b's
+claim that ZeRO does not shard activations, measured.
+
+The FSDP rows are *not* evidence that activations differ by stage. My measure
+captures everything retained for the backward pass, and under
+`reshard_after_forward=False` the **gathered parameters are deliberately
+retained too**, while `reshard=True` frees them. So ZeRO-2 retains ~950 KB
+more than DP and ZeRO-3 ~140 KB less. That is the transient side of the same
+memory/communication trade, visible in bytes.
+
+**And it corrected my activation estimate.** Measured 3,884,032 B against the
+`34·B·T·d·L` rule's 8,912,896 B — **0.436×, so the rule overestimates by about
+2.3×**. The reason is specific: `scaled_dot_product_attention` is flash-style
+and never materialises the T×T attention matrix that the coefficient 34
+assumes. My first attempt at this measurement used a probe model with no
+attention at all and read 0.31×, which said nothing about the rule and
+everything about an architecture mismatch — so I gave the probe real attention
+and re-ran. §3b is corrected accordingly.
+
 ### What remains unvalidated
 
 Absolute allocator peak, communication buffers, fragmentation and activation
@@ -506,7 +572,8 @@ it lost a piece of support it was never entitled to.
 
 ```
 pip install -r requirements-validation.txt
-python validate_pytorch_all_stages.py --world 4     # this section
+python validate_pytorch_all_stages.py --world 4     # section 9b
+python validate_measured_memory.py --world 2        # section 9c
 python validate_fsdp_cpu.py --world 4               # ZeRO-1 only, earlier run
 python validate_against_fsdp.py --world 2           # needs a GPU, unrun
 ```
@@ -517,9 +584,14 @@ python validate_against_fsdp.py --world 2           # needs a GPU, unrun
 
 Stated plainly, because several change how the numbers above should be read.
 
-1. **Memory is modelled, not measured.** Compute runs in float64 NumPy; the
-   ledger accounts fp16/fp32 as a real run would store them. **Ratios are
-   exact; absolute byte counts describe a hypothetical mixed-precision run.**
+1. **Memory is modelled, not measured** *inside the simulator* — compute runs
+   in float64 NumPy and the ledger accounts fp16/fp32 as a real run would
+   store them, so absolute byte counts describe a hypothetical
+   mixed-precision run and only ratios are exact. The ratios **are** now
+   checked against a real allocator peak in §9c (within 25%) and the sharding
+   arithmetic against real PyTorch in §9b. What is still unmeasured is CUDA
+   allocator behaviour specifically: fragmentation, caching, and
+   device-side communication buffers.
    Sharding arithmetic and communication volume **are** validated against real
    PyTorch in §9b; allocator peak is not, and needs a GPU.
 2. **`compute_fraction_of_step` is not MFU.** It is `compute_s / step_s`, and
