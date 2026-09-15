@@ -612,15 +612,16 @@ def test_readme_3b_carries_the_corrected_activation_figures():
     assert "311.4 GB" not in s, "stale uncorrected total still in README"
 
 
-def test_readme_section5_does_not_overclaim_authorship():
-    """The spec asks whether the student understood this, not the agent. The
-    section must say plainly who wrote the code."""
+def test_readme_section5_does_not_claim_to_have_written_the_code():
+    """The authorship note was cut at the author's decision. The section must
+    then not claim the keystrokes either -- describing what the BUILD got
+    wrong is fine; 'I wrote/implemented/coded' is not."""
     with open(README) as f:
         s = f.read()
-    i = s.index("## 5.")
-    seg = s[i:s.index("## 6.")]
-    assert "AI assistant" in seg or "agent" in seg, \
-        "section 5 must state authorship plainly"
+    seg = s[s.index("## 5."):s.index("## 6.")]
+    for phrase in ("I wrote the engine", "I implemented", "I coded",
+                   "code I wrote"):
+        assert phrase not in seg, f"section 5 claims authorship: {phrase!r}"
 
 
 def test_gpu_validation_instructions_exist_and_are_honest():

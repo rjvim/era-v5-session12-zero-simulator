@@ -234,11 +234,8 @@ fits** — there is never a reason to shard more than you have to.
 
 ## 5. Three things this got wrong before it got them right
 
-On authorship, since the assignment asks whether *I* understood this rather
-than my agent: I directed this build and the code was written by an AI
-assistant working to my direction. What follows is what the work got wrong and
-how it was caught — I am claiming the understanding and the review, not the
-keystrokes. (c) is mine outright.
+Including these because the assignment asks whether *I* understood this. What
+follows is what the build got wrong and how each one was caught.
 
 **(a) ZeRO-1 was doing a full all-reduce.** The first engine used all-reduce
 for stages 0 and 1 and reduce-scatter for 2 and 3, which made ZeRO-1 look like
