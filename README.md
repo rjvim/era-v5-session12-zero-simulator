@@ -560,7 +560,7 @@ running. Step-by-step instructions are in `GPU_VALIDATION.md`; it needs **2
 GPUs** (NCCL wants one process per device, so single-GPU Colab cannot measure
 sharding at all — Kaggle's free 2x T4 runtime can). The script uses FSDP2
 `fully_shard`, the same API verified on CPU in §9b, rather than the older
-FSDP1 which is not exercised anywhere here. Its value now is narrower than when I wrote it: the sharding
+FSDP1 which is not exercised anywhere here. Its value is narrower now than when it was added: the sharding
 arithmetic and communication volumes are settled by the run above, so what is
 left is allocator behaviour, which §10.1 never claimed to predict.
 
