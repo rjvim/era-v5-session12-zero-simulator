@@ -287,15 +287,34 @@ def exp10_activation_floor():
             "activation_share_of_peak": bd.get("activations", 0) / d["peak_bytes_per_gpu"],
         }
 
-    # Realistic scale, same activation estimate the engine uses.
+    # Realistic scale. Two activation columns: the 34*B*T*d rule the engine
+    # uses, and that rule scaled by the bias MEASURED in exp13
+    # (validate_measured_memory.py) -- real activations came out 0.436x of the
+    # rule, because flash-style attention never materialises the TxT matrix
+    # the coefficient 34 assumes. The corrected column is what README 3b
+    # quotes; the raw one is kept so the size of the correction is visible.
     PSI, LAYERS, D, SEQ, B = 27.9e9, 64, 7168, 8192, 1
-    act = 34 * B * SEQ * D * LAYERS * FP16
+    MEASURED_BIAS = 0.436
+    act_rule = 34 * B * SEQ * D * LAYERS * FP16
+    act = act_rule * MEASURED_BIAS
+    out["activation_bias_measured"] = {
+        "factor": MEASURED_BIAS,
+        "source": "artifacts/exp13_measured_memory.json",
+        "rule_gb": round(act_rule / 1e9, 1),
+        "corrected_gb": round(act / 1e9, 1),
+        "reason": ("flash-style scaled_dot_product_attention never "
+                   "materialises the TxT attention matrix that the "
+                   "coefficient 34 assumes"),
+    }
     for s in STAGES:
         ms = model_state_bytes(PSI, 8, s).total
         out["realistic"][str(s)] = {
             "model_state_gb": round(ms / 1e9, 1),
-            "activation_gb_no_checkpointing": round(act / 1e9, 1),
+            "activation_gb_rule_of_thumb": round(act_rule / 1e9, 1),
+            "activation_gb_corrected": round(act / 1e9, 1),
+            "total_gb_rule_of_thumb": round((ms + act_rule) / 1e9, 1),
             "total_gb": round((ms + act) / 1e9, 1),
+            "fits_80gb": bool((ms + act) <= 80e9),
             "activation_share": round(act / (ms + act), 3),
         }
     out["note"] = (

@@ -706,8 +706,8 @@ about an architecture mismatch; I gave the probe real attention and re-ran.
 
 Section 3b carries the corrected figures: activations ~111.4 GB rather than
 255.6, totals 557.8 / 264.8 / 216.0 / 167.2 GB. **The conclusion is
-unchanged** — nothing fits an 80 GB card — but the number was biased high and
-now says so.
+unchanged** — nothing fits an 80 GB card, and it would not fit on the
+overestimate either — but the number was biased high and now says so.
 """),
 
 md("""

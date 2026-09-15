@@ -6,7 +6,7 @@ ZeRO-1/2/3, show how memory and computation change.
 ```
 pip install -r requirements.txt   # numpy, matplotlib, pytest, nbformat
 python run_experiments.py       # regenerates every artifact
-python -m pytest tests/ -q      # 78 tests
+python -m pytest tests/ -q      # 80 tests
 jupyter notebook notebook.ipynb # narrated walkthrough, figures + outputs committed
 ```
 
@@ -126,14 +126,14 @@ non-trivial, so agreeing on it is informative.
 
 ### 3b. The 32× is model states. Real peak falls 5.92×.
 
-I nearly published only the 32× figure, and I think that would have been
-cherry-picking my own result. The two reduction columns above disagree, and
-the gap is the most important thing in this section.
+The first draft of the table above reported only the 32× model-state
+reduction. That is the flattering number and it is not the one that matters:
+the two reduction columns disagree, and the gap between them is the point of
+this section.
 
 **ZeRO does not shard activations. At all.** They are byte-identical on every
-stage — 69,632 B here — so they set a hard floor under peak memory. As you
-shard model states away, activations become a larger and larger share of
-what's left:
+stage — 69,632 B here — so they set a hard floor under peak memory. As model
+states get sharded away, activations become most of what is left:
 
 | Stage | Activation share of peak |
 | --- | ---: |
@@ -142,42 +142,36 @@ what's left:
 | ZeRO-2 | 51% |
 | ZeRO-3 | **82%** |
 
-By ZeRO-3, four fifths of the memory is something ZeRO doesn't touch. That is
+By ZeRO-3, four fifths of the memory is something ZeRO never touches. That is
 why 32× on model states becomes 5.92× on peak.
 
-And at realistic scale it is far worse. Ψ = 27.9B, 64 layers, d = 7168,
-seq = 8192, batch 1 per GPU, N=8, **no activation checkpointing**:
+At realistic scale it matters more. Ψ = 27.9B, 64 layers, d = 7168, seq = 8192,
+batch 1 per GPU, N=8, **no activation checkpointing**:
 
 | Stage | Model states | + Activations | Total | Fits 80 GB? |
 | --- | ---: | ---: | ---: | --- |
-| DP | 446.4 GB | 255.6 GB | 702.0 GB | ✗ |
-| ZeRO-1 | 153.4 GB | 255.6 GB | 409.0 GB | ✗ |
-| ZeRO-2 | 104.6 GB | 255.6 GB | 360.2 GB | ✗ |
-| ZeRO-3 | 55.8 GB | 255.6 GB | **311.4 GB** | **✗** |
+| DP | 446.4 GB | 111.4 GB | 557.8 GB | ✗ |
+| ZeRO-1 | 153.4 GB | 111.4 GB | 264.8 GB | ✗ |
+| ZeRO-2 | 104.6 GB | 111.4 GB | 216.0 GB | ✗ |
+| ZeRO-3 | 55.8 GB | 111.4 GB | **167.2 GB** | **✗** |
 
-**Nothing fits.** Activations alone dominate — and sharding model states 32×
-is almost beside the point next to that.
+**Nothing fits.** Not even ZeRO-3. Activations alone exceed an 80 GB card, and
+sharding model states 32× is almost beside the point next to that.
 
-**Correction, from the measurement in §9c.** The 255.6 GB above uses the
-`34·B·T·d` rule of thumb, and I later measured that rule against real
-activations: **it overestimates by about 2.3×**, because
-`scaled_dot_product_attention` is flash-style and never materialises the T×T
-attention matrix that the coefficient 34 assumes. Scaling by the measured
-0.436 gives **≈111.4 GB**, so the corrected totals are 557.8 / 264.8 / 216.0 /
-**167.2 GB**. The conclusion is unchanged — nothing fits an 80 GB card — but
-the table above is biased high by roughly 2.3× and should be read as an upper
-bound, which is what §10.6 now says.
+The 111.4 GB is itself a correction. The `34·B·T·d` rule of thumb gives
+255.6 GB, and §9c measures that rule against real activations: **it
+overestimates by about 2.3×**, because flash-style
+`scaled_dot_product_attention` never materialises the T×T attention matrix the
+coefficient 34 assumes. The conclusion did not change when I corrected it, but
+the number was wrong by more than a factor of two.
 
-This changes a claim I make later in §4 and I want to flag it here rather than
-let the two sections quietly contradict each other: when I say "ZeRO-3 is the
-only stage that fits at 27.9B", that is a statement about **model states
-only**. Counting activations, no stage fits without activation
-checkpointing. That is precisely why checkpointing is mandatory at scale
-rather than an optimisation, and why the ZeRO paper has a separate ZeRO-R for
-sharding activations. My simulator implements neither, so the table above is
-an **upper bound** on activation cost, not a prediction of a real run.
-
----
+Two consequences worth stating. First, activation checkpointing is mandatory at
+this scale rather than an optimisation — and the ZeRO paper has a separate
+ZeRO-R for sharding activations. This simulator implements neither, so treat
+the table as an upper bound. Second, it scopes a claim in §4: "ZeRO-3 is the
+only stage that fits at 27.9B" is about **model states only**. Counting
+activations, nothing fits. Fitting is a joint property of the ZeRO stage and
+the activation strategy, and only the first is modelled here.
 
 ## 4. Compute — what changes, and what doesn't
 
@@ -238,41 +232,48 @@ fits** — there is never a reason to shard more than you have to.
 
 ---
 
-## 5. Three things I got wrong
+## 5. Three things this got wrong before it got them right
 
-Including these because the assignment asks whether *I* understood this, and
-honestly I understood it by getting it wrong first.
+On authorship, since the assignment asks whether *I* understood this rather
+than my agent: I directed this build and the code was written by an AI
+assistant working to my direction. What follows is what the work got wrong and
+how it was caught — I am claiming the understanding and the review, not the
+keystrokes. (c) is mine outright.
 
-**(a) I had ZeRO-1 doing a full all-reduce.** My first engine used all-reduce
-for stages 0 and 1, reduce-scatter for 2 and 3, which made ZeRO-1 look like it
-cost 3Ψ. Wrong: a ZeRO-1 rank only updates its own slice, so reduce-scatter
-delivers exactly what it needs. ZeRO-1 and ZeRO-2 have **identical**
-communication — both 104,904 B here.
+**(a) ZeRO-1 was doing a full all-reduce.** The first engine used all-reduce
+for stages 0 and 1 and reduce-scatter for 2 and 3, which made ZeRO-1 look like
+it cost 3Ψ. Wrong: a ZeRO-1 rank only ever updates its own slice, so
+reduce-scatter already delivers exactly what it needs. ZeRO-1 and ZeRO-2 have
+**identical** communication — both 104,904 B here, and independently confirmed
+against real PyTorch in §9b.
 
-The consequence is worth stating plainly: **ZeRO-2 is a strict improvement over
-ZeRO-1.** Better memory, identical wire cost, identical math. There is no
-configuration where ZeRO-1 is the right answer. I did not know that before
-building this, and I don't think it's obvious from the lecture table, where
-they look like two adjacent rungs with a trade-off between them.
+The consequence is the most useful thing I took from this: **ZeRO-2 strictly
+dominates ZeRO-1.** Less memory, identical wire cost, identical mathematics.
+There is no configuration where ZeRO-1 is the right answer. Supporting
+evidence I did not expect — FSDP does not expose a ZeRO-1 equivalent at all.
 
-My communication test (`test_zero3_communicates_more`) caught it by failing.
+Caught by `test_zero3_communicates_more` failing, not by re-reading the code.
 
-**(b) My ZeRO-3 gathered weights only once.** I had it all-gather before the
-step and hold the full vector across forward *and* backward. That's wrong in a
-way that mattered: ZeRO-3 frees each bucket immediately after the forward uses
-it — **that freeing is the entire memory saving** — so the backward finds
-nothing resident and has to gather all over again. Two gathers plus one
-reduce-scatter is where `3Ψ` comes from. My version was quietly claiming
-ZeRO-3's memory savings while paying ZeRO-2's communication. Same test caught
-it: the ratio came out 1.0 instead of 1.5.
+**(b) ZeRO-3 gathered weights only once.** It all-gathered before the step and
+held the full vector across forward *and* backward. That is wrong in a way
+that mattered: ZeRO-3 frees each bucket as soon as the forward is done with it
+— **that freeing is the entire memory saving** — so the backward finds nothing
+resident and must gather again. Two gathers plus one reduce-scatter is where
+`3Ψ` comes from. The broken version was claiming ZeRO-3's memory while paying
+ZeRO-2's communication. Same test caught it: the ratio came out 1.0 instead of
+1.5.
+
+Later measured on real FSDP2 (§9b): 5 all-gathers for ZeRO-2, **10** for
+ZeRO-3, reduce-scatters unchanged at 5. The mechanism is real.
 
 **(c) I guessed a number instead of deriving it.** Explaining ZeRO-2 at N=8
-before building anything, I said "~95 GB" by eyeballing between the stated 153
-and 55. The arithmetic says **104.62 GB** (`3.75Ψ`). Interpolating linearly on
-a curve of the form `a + b/N` is just wrong. Corrected everywhere here, and I'm
-leaving the error recorded rather than quietly fixing it.
+before any of this was built, I said "~95 GB" — eyeballed between the stated
+153 and 55. The arithmetic gives **104.62 GB** (`3.75Ψ`). Interpolating
+linearly on a curve of the form `a + b/N` is simply wrong. Recorded here
+rather than quietly fixed.
 
----
+The pattern across all three: every one was caught by a test failing, and none
+by inspection. That is the argument for writing the invariant tests first.
 
 ## 6. Checking against real ZeRO
 
@@ -395,7 +396,7 @@ validate_fsdp_cpu.py     RUN: earlier ZeRO-1-only check
 tools/build_notebook.py  regenerates notebook.ipynb
 requirements.txt         core deps; -validation.txt is torch, for 9b only
 validate_against_fsdp.py UNRUN: needs a GPU, for ZeRO-2/3 (see 9b)
-tests/                   78 tests
+tests/                   80 tests
 notebook.ipynb           narrated walkthrough, 4 figures, outputs committed
 ```
 

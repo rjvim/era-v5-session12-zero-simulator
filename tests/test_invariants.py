@@ -156,7 +156,7 @@ NUMBERS_IN_README = [
     "1.741", "1,864", "1,802", "1,692", "1,251", "8,080", "7,515",
     "31,760", "16,065", "0.94", "33.55", "4.29",
     "502,784", "188,072", "135,620", "84,860", "5.92", "69,632",
-    "255.6", "311.4", "702.0", "409.0", "360.2", "82%",
+    "255.6", "111.4", "82%",
     # exp12 (supersedes exp11's ZeRO-1-only run as the quoted result)
     "660,736", "1,321,472", "330,496", "330,368", "165,184",
     "3,964,416", "5,946,624", "2.25", "1.667", "1.8", "4.8e-07",
@@ -383,13 +383,29 @@ def test_activations_identical_across_stages():
 
 
 def test_nothing_fits_at_realistic_scale_with_activations():
-    """The correction to my own section 4 claim: counting activations, no
-    stage fits an 80 GB card without checkpointing."""
-    r = art("exp10_activation_floor.json")["realistic"]
+    """Counting activations, no stage fits an 80 GB card without
+    checkpointing -- and this must hold for the CORRECTED activation figure,
+    not just the inflated rule-of-thumb one."""
+    a = art("exp10_activation_floor.json")
+    r = a["realistic"]
     for s in "0123":
         assert r[s]["total_gb"] > 80, f"stage {s} unexpectedly fits"
-    assert r["3"]["total_gb"] == pytest.approx(311.4, abs=0.1)
-    assert r["3"]["activation_gb_no_checkpointing"] == pytest.approx(255.6, abs=0.1)
+        assert r[s]["fits_80gb"] is False
+        # the conclusion must not depend on the overestimate
+        assert r[s]["total_gb_rule_of_thumb"] > 80
+    assert r["3"]["total_gb"] == pytest.approx(167.2, abs=0.1)
+    assert r["3"]["activation_gb_corrected"] == pytest.approx(111.4, abs=0.1)
+    assert r["3"]["activation_gb_rule_of_thumb"] == pytest.approx(255.6, abs=0.1)
+
+
+def test_activation_bias_is_sourced_from_the_measurement():
+    """exp10's corrected figure must trace to exp13's measured factor, not to
+    a number chosen to make the table look better."""
+    a = art("exp10_activation_floor.json")["activation_bias_measured"]
+    measured = art("exp13_measured_memory.json")["activation_rule_of_thumb"]
+    assert a["factor"] == pytest.approx(measured["measured_over_estimate"],
+                                        abs=0.001)
+    assert "exp13" in a["source"]
 
 
 def test_readme_does_not_contradict_itself_on_fitting():
@@ -590,8 +606,21 @@ def test_readme_3b_carries_the_corrected_activation_figures():
     """The corrected numbers must appear, and the conclusion must still hold."""
     with open(README) as f:
         s = f.read()
-    for n in ("111.4", "167.2", "557.8"):
+    for n in ("111.4", "167.2", "557.8", "264.8", "216.0"):
         assert n in s, f"corrected figure {n} missing from README"
+    # the superseded figures must NOT still be presented as current
+    assert "311.4 GB" not in s, "stale uncorrected total still in README"
+
+
+def test_readme_section5_does_not_overclaim_authorship():
+    """The spec asks whether the student understood this, not the agent. The
+    section must say plainly who wrote the code."""
+    with open(README) as f:
+        s = f.read()
+    i = s.index("## 5.")
+    seg = s[i:s.index("## 6.")]
+    assert "AI assistant" in seg or "agent" in seg, \
+        "section 5 must state authorship plainly"
 
 
 def test_gpu_validation_instructions_exist_and_are_honest():

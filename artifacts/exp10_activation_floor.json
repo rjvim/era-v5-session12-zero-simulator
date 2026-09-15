@@ -1,29 +1,48 @@
 {
+  "activation_bias_measured": {
+    "corrected_gb": 111.4,
+    "factor": 0.436,
+    "reason": "flash-style scaled_dot_product_attention never materialises the TxT attention matrix that the coefficient 34 assumes",
+    "rule_gb": 255.6,
+    "source": "artifacts/exp13_measured_memory.json"
+  },
   "note": "At realistic scale activations dwarf even DP's model states. Sharding model states 32x is pointless if activations alone are hundreds of GB, which is why activation checkpointing is mandatory rather than an optimisation, and why ZeRO-R exists to shard activations separately. My simulator does NOT implement checkpointing, so the realistic column is an upper bound on activation cost, not a prediction of a real run.",
   "realistic": {
     "0": {
-      "activation_gb_no_checkpointing": 255.6,
-      "activation_share": 0.364,
+      "activation_gb_corrected": 111.4,
+      "activation_gb_rule_of_thumb": 255.6,
+      "activation_share": 0.2,
+      "fits_80gb": false,
       "model_state_gb": 446.4,
-      "total_gb": 702.0
+      "total_gb": 557.8,
+      "total_gb_rule_of_thumb": 702.0
     },
     "1": {
-      "activation_gb_no_checkpointing": 255.6,
-      "activation_share": 0.625,
+      "activation_gb_corrected": 111.4,
+      "activation_gb_rule_of_thumb": 255.6,
+      "activation_share": 0.421,
+      "fits_80gb": false,
       "model_state_gb": 153.4,
-      "total_gb": 409.0
+      "total_gb": 264.9,
+      "total_gb_rule_of_thumb": 409.0
     },
     "2": {
-      "activation_gb_no_checkpointing": 255.6,
-      "activation_share": 0.71,
+      "activation_gb_corrected": 111.4,
+      "activation_gb_rule_of_thumb": 255.6,
+      "activation_share": 0.516,
+      "fits_80gb": false,
       "model_state_gb": 104.6,
-      "total_gb": 360.2
+      "total_gb": 216.0,
+      "total_gb_rule_of_thumb": 360.2
     },
     "3": {
-      "activation_gb_no_checkpointing": 255.6,
-      "activation_share": 0.821,
+      "activation_gb_corrected": 111.4,
+      "activation_gb_rule_of_thumb": 255.6,
+      "activation_share": 0.666,
+      "fits_80gb": false,
       "model_state_gb": 55.8,
-      "total_gb": 311.4
+      "total_gb": 167.2,
+      "total_gb_rule_of_thumb": 311.4
     }
   },
   "toy": {
