@@ -279,7 +279,12 @@ def test_fsdp_validation_harness_exists_and_states_tolerance():
     src = open(p).read()
     assert "15%" in src, "tolerance must be stated in the script"
     assert "IT IS NOT RUN IN THIS REPO" in src, "must be explicit it was not run"
-    assert "FULL_SHARD" in src and "SHARD_GRAD_OP" in src
+    # Uses FSDP2 fully_shard -- the API actually verified on CPU in 9b --
+    # rather than FSDP1, which is not exercised anywhere in this repo.
+    assert "fully_shard" in src and "reshard_after_forward" in src
+    assert "FullyShardedDataParallel" not in src, \
+        "should not use the untested FSDP1 path"
+    assert "2 GPUs" in src, "must state the 2-GPU requirement"
 
 
 def test_artifacts_are_reproducible():
@@ -328,15 +333,26 @@ def test_requirements_covers_every_third_party_import():
             if line:
                 declared.add(re.split(r"[<>=!\[]", line)[0].strip().lower())
 
+    # Parse with ast, not a regex. A regex over source lines matches prose
+    # inside docstrings -- "from README 9b: ..." in validate_against_fsdp.py
+    # was read as `import readme` and failed this test spuriously.
+    import ast
+
     used = set()
-    pat = re.compile(r"^\s*(?:import|from)\s+([A-Za-z_][A-Za-z_0-9]*)")
     for f in pathlib.Path(ROOT).rglob("*.py"):
         if ".git" in f.parts:
             continue
-        for line in f.read_text().splitlines():
-            m = pat.match(line)
-            if m:
-                used.add(m.group(1).lower())
+        try:
+            tree = ast.parse(f.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for n in node.names:
+                    used.add(n.name.split(".")[0].lower())
+            elif isinstance(node, ast.ImportFrom):
+                if node.level == 0 and node.module:
+                    used.add(node.module.split(".")[0].lower())
 
     third_party = {m for m in used
                    if m not in stdlib and m != "zerosim" and not m.startswith("_")}

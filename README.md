@@ -6,7 +6,7 @@ ZeRO-1/2/3, show how memory and computation change.
 ```
 pip install -r requirements.txt   # numpy, matplotlib, pytest, nbformat
 python run_experiments.py       # regenerates every artifact
-python -m pytest tests/ -q      # 77 tests
+python -m pytest tests/ -q      # 78 tests
 jupyter notebook notebook.ipynb # narrated walkthrough, figures + outputs committed
 ```
 
@@ -395,7 +395,7 @@ validate_fsdp_cpu.py     RUN: earlier ZeRO-1-only check
 tools/build_notebook.py  regenerates notebook.ipynb
 requirements.txt         core deps; -validation.txt is torch, for 9b only
 validate_against_fsdp.py UNRUN: needs a GPU, for ZeRO-2/3 (see 9b)
-tests/                   77 tests
+tests/                   78 tests
 notebook.ipynb           narrated walkthrough, 4 figures, outputs committed
 ```
 
