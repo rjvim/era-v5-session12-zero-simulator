@@ -576,3 +576,12 @@ def test_readme_3b_carries_the_corrected_activation_figures():
         s = f.read()
     for n in ("111.4", "167.2", "557.8"):
         assert n in s, f"corrected figure {n} missing from README"
+
+
+def test_gpu_validation_instructions_exist_and_are_honest():
+    p = os.path.join(ROOT, "GPU_VALIDATION.md")
+    assert os.path.exists(p)
+    s = open(p).read()
+    assert "2 GPUs" in s or "2 GPUs, not 1" in s
+    assert "Do not widen the tolerance" in s
+    assert "15%" in s

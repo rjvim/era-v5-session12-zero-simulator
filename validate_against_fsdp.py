@@ -19,12 +19,15 @@ is none. Run it on Colab (T4 is enough) or any CUDA box:
 
     python validate_against_fsdp.py --world 2 --stage 3
 
-FSDP -> ZeRO mapping:
-    ZeRO-1  ~  no direct FSDP equivalent (FSDP always shards grads with optim)
-               use DeepSpeed stage 1 instead, see --backend deepspeed
-    ZeRO-2  =  ShardingStrategy.SHARD_GRAD_OP
-    ZeRO-3  =  ShardingStrategy.FULL_SHARD
-    DP      =  ShardingStrategy.NO_SHARD  (== DistributedDataParallel)
+Mapping (FSDP2):
+    DP      =  DistributedDataParallel
+    ZeRO-1  =  ZeroRedundancyOptimizer -- already verified on CPU, see 9b
+    ZeRO-2  =  fully_shard(reshard_after_forward=False)
+    ZeRO-3  =  fully_shard(reshard_after_forward=True)
+
+NEEDS AT LEAST 2 GPUs. NCCL wants one process per device, so a single-GPU
+runtime (free Colab) cannot measure sharding at all -- world_size=1 shards
+nothing. Kaggle's free 2x T4 runtime works.
 
 What "match" should mean here, stated before running so it can't be moved
 afterwards:
@@ -84,11 +87,21 @@ def build_model(d_model=1024, n_layer=8, vocab=4096):
 
 
 def run(rank, world, stage, args, out):
+    """Uses FSDP2 (fully_shard), not FSDP1.
+
+    Deliberate: FSDP2 is the API actually exercised in
+    validate_pytorch_all_stages.py on CPU, so the sharding semantics here are
+    the ones already verified. FSDP1 was never run anywhere in this repo and
+    would be an untested code path in a script I cannot test myself.
+
+    stage 2 -> reshard_after_forward=False, stage 3 -> True. Note the caveat
+    from README 9b: FSDP2 always shards persistent parameter storage, so its
+    stage-2 parameter memory is ZeRO-3-like, not DeepSpeed ZeRO-2.
+    """
     import torch
     import torch.distributed as dist
-    from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-    from torch.distributed.fsdp import ShardingStrategy
-    from torch.distributed.fsdp.wrap import ModuleWrapPolicy
+    from torch.distributed.device_mesh import init_device_mesh
+    from torch.distributed.fsdp import fully_shard
 
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
     os.environ.setdefault("MASTER_PORT", "29511")
@@ -99,15 +112,15 @@ def run(rank, world, stage, args, out):
     psi = sum(p.numel() for p in model.parameters())
     model = model.cuda(rank)
 
-    strategy = {
-        0: ShardingStrategy.NO_SHARD,
-        2: ShardingStrategy.SHARD_GRAD_OP,
-        3: ShardingStrategy.FULL_SHARD,
-    }[stage]
-
-    model = FSDP(model, sharding_strategy=strategy,
-                 auto_wrap_policy=ModuleWrapPolicy({Block}),
-                 device_id=rank, use_orig_params=True)
+    if stage != 0:
+        mesh = init_device_mesh("cuda", (world,))
+        reshard = (stage == 3)
+        for b in model.blocks:
+            fully_shard(b, mesh=mesh, reshard_after_forward=reshard)
+        fully_shard(model, mesh=mesh, reshard_after_forward=reshard)
+    else:
+        from torch.nn.parallel import DistributedDataParallel as DDP
+        model = DDP(model, device_ids=[rank])
     opt = torch.optim.AdamW(model.parameters(), lr=1e-4, betas=(0.9, 0.95))
 
     torch.cuda.reset_peak_memory_stats(rank)

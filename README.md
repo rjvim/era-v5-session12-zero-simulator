@@ -390,6 +390,7 @@ zerosim/data.py          syllable-level mantra corpus
 run_experiments.py       regenerates artifacts/ (10 experiments)
 validate_pytorch_all_stages.py  RUN: all 4 stages vs DDP/ZeRO-1/FSDP2 (9b)
 validate_measured_memory.py     RUN: real peak + real activations (9c)
+GPU_VALIDATION.md        how to run the one remaining check (needs 2 GPUs)
 validate_fsdp_cpu.py     RUN: earlier ZeRO-1-only check
 tools/build_notebook.py  regenerates notebook.ipynb
 requirements.txt         core deps; -validation.txt is torch, for 9b only
@@ -557,7 +558,11 @@ and re-ran. §3b is corrected accordingly.
 Absolute allocator peak, communication buffers, fragmentation and activation
 memory — all need a GPU. `validate_against_fsdp.py` is the harness for that,
 **unrun, with no committed output**, tolerance fixed in the script before
-running. Its value now is narrower than when I wrote it: the sharding
+running. Step-by-step instructions are in `GPU_VALIDATION.md`; it needs **2
+GPUs** (NCCL wants one process per device, so single-GPU Colab cannot measure
+sharding at all — Kaggle's free 2x T4 runtime can). The script uses FSDP2
+`fully_shard`, the same API verified on CPU in §9b, rather than the older
+FSDP1 which is not exercised anywhere here. Its value now is narrower than when I wrote it: the sharding
 arithmetic and communication volumes are settled by the run above, so what is
 left is allocator behaviour, which §10.1 never claimed to predict.
 
