@@ -1,0 +1,66 @@
+{
+  "backend": "gloo (CPU)",
+  "world": 4,
+  "psi": 858880,
+  "what_this_validates": "Per-rank MODEL STATE element counts against the simulator's ledger. Not allocator peak, not activations -- those need a GPU.",
+  "tolerance_pct": 2.0,
+  "scope": "Stages 0 and 1 only. FSDP refuses to initialise without a non-CPU accelerator, so ZeRO-2/3 cannot be validated on this machine and remain the job of validate_against_fsdp.py.",
+  "correction_this_run_produced": "README previously said PyTorch has no ZeRO-1 and stage 1 needs DeepSpeed. Wrong: ZeroRedundancyOptimizer is PyTorch's ZeRO-1.",
+  "stages": {
+    "0": {
+      "implementation": "DDP + AdamW",
+      "measured": {
+        "param_elems": 858880,
+        "grad_elems": 858880,
+        "optim_moment_elems": 1717760
+      },
+      "predicted": {
+        "param_elems": 858880,
+        "grad_elems": 858880,
+        "optim_moment_elems": 1717760
+      },
+      "relative_error": {
+        "params": 0.0,
+        "grads": 0.0,
+        "moments": 0.0
+      },
+      "within_tolerance": true,
+      "losses": [
+        5.821261882781982,
+        4.536523818969727,
+        3.5101678371429443
+      ],
+      "simulator_model_state_bytes": 13742080
+    },
+    "1": {
+      "implementation": "DDP + ZeroRedundancyOptimizer",
+      "measured": {
+        "param_elems": 858880,
+        "grad_elems": 858880,
+        "optim_moment_elems": 429568
+      },
+      "predicted": {
+        "param_elems": 858880,
+        "grad_elems": 858880,
+        "optim_moment_elems": 429440.0
+      },
+      "relative_error": {
+        "params": 0.0,
+        "grads": 0.0,
+        "moments": 0.0003
+      },
+      "within_tolerance": true,
+      "losses": [
+        5.821261882781982,
+        4.536523818969727,
+        3.5101678371429443
+      ],
+      "simulator_model_state_bytes": 6012160.0
+    }
+  },
+  "loss_agreement_vs_no_shard": {
+    "0": 0.0,
+    "1": 0.0
+  },
+  "all_within_tolerance": true
+}

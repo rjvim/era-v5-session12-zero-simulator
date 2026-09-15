@@ -157,6 +157,7 @@ NUMBERS_IN_README = [
     "31,760", "16,065", "0.94", "33.55", "4.29",
     "502,784", "188,072", "135,620", "84,860", "5.92", "69,632",
     "255.6", "311.4", "702.0", "409.0", "360.2", "82%",
+    "858,880", "1,717,760", "429,568", "429,440", "0.0003", "0.03%",
 ]
 
 
@@ -377,3 +378,81 @@ def test_readme_does_not_contradict_itself_on_fitting():
         s = f.read()
     assert "only stage whose model\nstates fit" in s or "model states only" in s
     assert "3b" in s, "the activation-floor section must be cross-referenced"
+
+
+# --------------------------------------------- real-implementation validation
+def test_fsdp_cpu_validation_was_actually_run():
+    """exp11 must exist with real measurements (unlike the GPU harness)."""
+    a = art("exp11_fsdp_cpu_validation.json")
+    assert a["all_within_tolerance"] is True
+    assert a["psi"] == 858880 and a["world"] == 4
+    assert a["tolerance_pct"] == 2.0
+
+
+def test_zero1_ledger_matches_pytorch():
+    a = art("exp11_fsdp_cpu_validation.json")["stages"]
+    psi = 858880
+    # DP: full params, full grads, 2*Psi Adam moments, all exact
+    assert a["0"]["measured"]["param_elems"] == psi
+    assert a["0"]["measured"]["grad_elems"] == psi
+    assert a["0"]["measured"]["optim_moment_elems"] == 2 * psi
+    assert max(a["0"]["relative_error"].values()) == 0.0
+    # ZeRO-1: params and grads still full, moments sharded 4 ways
+    assert a["1"]["measured"]["param_elems"] == psi
+    assert a["1"]["measured"]["grad_elems"] == psi
+    assert a["1"]["measured"]["optim_moment_elems"] == 429568
+    assert a["1"]["relative_error"]["moments"] == pytest.approx(0.0003, abs=1e-4)
+
+
+def test_pytorch_confirms_stage_invariance():
+    """Loss must be bit-identical between DDP and DDP+ZeRO-1."""
+    a = art("exp11_fsdp_cpu_validation.json")["loss_agreement_vs_no_shard"]
+    for s, d in a.items():
+        assert d == 0.0, f"stage {s} diverged from DDP by {d}"
+
+
+def test_readme_does_not_claim_pytorch_lacks_zero1():
+    """A corrected claim must stay corrected."""
+    with open(README) as f:
+        s = f.read()
+    assert "ZeroRedundancyOptimizer" in s
+    assert "no ZeRO-1 equivalent" not in s or "That was wrong" in s
+
+
+def test_gpu_harness_still_honestly_marked_unrun():
+    assert not os.path.exists(os.path.join(ART, "exp10_fsdp_validation.json")), \
+        "GPU harness output must not appear unless actually run"
+    src = open(os.path.join(ROOT, "validate_against_fsdp.py")).read()
+    assert "IT IS NOT RUN IN THIS REPO" in src
+
+
+def test_notebook_and_readme_cover_the_same_sections():
+    """Two of my notebook patches silently no-op'd (a string anchor that did
+    not match), shipping a notebook missing a section the README had. This
+    asserts the two stay in step."""
+    import nbformat
+    nb = nbformat.read(os.path.join(ROOT, "notebook.ipynb"), as_version=4)
+    nb_text = "\n".join(
+        c.source if isinstance(c.source, str) else "".join(c.source)
+        for c in nb.cells if c.cell_type == "markdown")
+    with open(README) as f:
+        rd = f.read()
+    required = [
+        ("activation floor", "activations", "activations"),
+        ("real-implementation validation", "ZeroRedundancyOptimizer",
+         "ZeroRedundancyOptimizer"),
+        ("the three mistakes", "got wrong", "got wrong"),
+        ("bucket trade-off", "bucket", "bucket"),
+        ("limitations", "Limitations", "Limitations"),
+    ]
+    missing = [name for name, nbk, rdk in required
+               if nbk.lower() not in nb_text.lower() or rdk.lower() not in rd.lower()]
+    assert not missing, f"topic present in one document but not the other: {missing}"
+
+
+def test_notebook_builder_anchors_still_resolve():
+    """The build script must not contain a replace whose anchor is absent --
+    that is how the silent no-ops happened."""
+    src = open(os.path.join(ROOT, "tools", "build_notebook.py")).read()
+    for marker in ("## 8b", "### 3b", "## 9 "):
+        assert marker in src, f"builder lost section {marker!r}"

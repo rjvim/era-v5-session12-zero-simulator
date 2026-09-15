@@ -6,7 +6,7 @@ ZeRO-1/2/3, show how memory and computation change.
 ```
 pip install -r requirements.txt   # numpy, matplotlib, pytest, nbformat
 python run_experiments.py       # regenerates every artifact
-python -m pytest tests/ -q      # 57 tests
+python -m pytest tests/ -q      # 64 tests
 jupyter notebook notebook.ipynb # narrated walkthrough, figures + outputs committed
 ```
 
@@ -378,10 +378,11 @@ zerosim/plots.py         the four figures
 zerosim/engine.py        stages 0-3, actually executed
 zerosim/data.py          syllable-level mantra corpus
 run_experiments.py       regenerates artifacts/ (10 experiments)
+validate_fsdp_cpu.py     RUN: validates ZeRO-1 vs PyTorch ZeroRedundancyOptimizer
 tools/build_notebook.py  regenerates notebook.ipynb
 requirements.txt         core deps; -validation.txt is torch, for 9b only
-validate_against_fsdp.py checks the ledger against real PyTorch FSDP (see 9b)
-tests/                   57 tests
+validate_against_fsdp.py UNRUN: needs a GPU, for ZeRO-2/3 (see 9b)
+tests/                   64 tests
 notebook.ipynb           narrated walkthrough, 4 figures, outputs committed
 ```
 
@@ -408,41 +409,70 @@ wall-clock.
 
 ## 9b. Validating against a real ZeRO implementation
 
-Everything above checks my simulator against the ZeRO **paper's arithmetic**
-(§3) and against the lecture whiteboard (§6). I want to be explicit that
-neither of those is a check against a *running* implementation — both are
-checks against formulas, and it would be easy to present them as more than
-they are.
+§3 checks my simulator against the ZeRO **paper's arithmetic** and §6 against
+the lecture whiteboard. Both are checks against formulas. I wanted at least
+one check against a *running* implementation.
 
-`validate_against_fsdp.py` closes that gap. It runs PyTorch FSDP on a matched
-model and compares measured `torch.cuda.max_memory_allocated()` against my
-predicted ledger:
+### What I could run: ZeRO-1, verified (`validate_fsdp_cpu.py`)
 
-| FSDP `ShardingStrategy` | Equivalent to |
-| --- | --- |
-| `NO_SHARD` | DP |
-| `SHARD_GRAD_OP` | ZeRO-2 |
-| `FULL_SHARD` | ZeRO-3 |
+`torch.distributed.optim.ZeroRedundancyOptimizer` is PyTorch's own ZeRO-1 —
+it shards optimizer state across ranks — and it runs on the gloo/CPU backend.
+So this one is **actually executed, with output committed** to
+`artifacts/exp11_fsdp_cpu_validation.json`. Ψ = 858,880 over 4 ranks:
 
-(FSDP has no ZeRO-1 equivalent — it always shards gradients alongside
-optimizer states. Stage 1 needs DeepSpeed. Which is itself consistent with my
-finding in §5(a) that ZeRO-1 is strictly dominated: the PyTorch authors
-apparently didn't think it was worth exposing either.)
+| Stage | Implementation | Params | Grads | Adam moments | Predicted | Rel. err |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 0 | DDP + AdamW | 858,880 | 858,880 | 1,717,760 | 2Ψ | **0.0000** |
+| 1 | DDP + ZeroRedundancyOptimizer | 858,880 | 858,880 | 429,568 | 429,440 | **0.0003** |
 
-**I have not run it, and there is no output for it in this repo.** The machine
-I built this on has no CUDA and couldn't install torch. Committing fabricated
-numbers would be worse than admitting the gap.
+Two results worth separating.
 
-The tolerance is stated in the script *before* running, so it can't be moved
-afterwards:
+**The ledger is right.** Real ZeRO-1 holds full parameters, full gradients, and
+a quarter of the Adam moments on 4 ranks — exactly what §1's table predicts.
+Params and grads match to zero error.
 
-- Stage **ratios** should agree within **15%**.
-- **Absolute** bytes are *not* expected to match. FSDP's caching allocator,
-  communication buffers, and real activation memory are things my simulator
-  models crudely or not at all. Predicting absolute
-  `max_memory_allocated()` is not a claim this simulator makes.
-- If ratios disagree by more than 15%, **my simulator is wrong and §3 needs
-  correcting** — not the tolerance.
+**The math is stage-invariant, confirmed externally.** Loss agreement between
+DDP and DDP+ZeRO-1 is **exactly 0.0** across every step. My central claim —
+"the stage is invisible to the mathematics" — now rests on PyTorch's
+implementation as well as my own, which is a much better place for it to rest.
+
+And the 0.03% discrepancy is informative rather than noise: **real ZeRO-1
+shards at parameter granularity, not element granularity.** It assigns whole
+tensors to ranks greedily, so its shards are slightly uneven (429,568 vs a
+perfectly-even 429,440). My simulator splits the flat vector at element
+boundaries, so its shards are exactly equal. That is a genuine modelling
+difference, it is small, and it is in §10.11 rather than rounded away.
+
+### What I could not run: ZeRO-2 and ZeRO-3
+
+FSDP is the ZeRO-2/ZeRO-3 equivalent (`SHARD_GRAD_OP` / `FULL_SHARD`), and it
+**refuses to initialise without a GPU** — "FSDP needs a non-CPU accelerator
+device". There is no GPU on the machine I built this on, so stages 2 and 3
+could not be checked against a real implementation.
+
+`validate_against_fsdp.py` is the harness for that, ready to run on Colab:
+
+```
+pip install -r requirements-validation.txt
+python validate_against_fsdp.py --world 2 --stages 0,2,3
+```
+
+**It has not been run and there is no committed output for it.** Fabricating
+numbers would be worse than an admitted gap. Its tolerance is written into the
+script *before* running so it cannot be moved afterwards: stage **ratios**
+within 15%; **absolute** bytes explicitly not claimed, since FSDP's caching
+allocator, communication buffers and real activation memory are things this
+simulator models crudely or not at all. If the ratios disagree by more than
+15%, **my simulator is wrong and §3 needs correcting** — not the tolerance.
+
+### A claim of mine this exercise corrected
+
+An earlier draft of this README said PyTorch has no ZeRO-1 equivalent and that
+stage 1 needs DeepSpeed, and I used that as supporting evidence for §5(a)
+("ZeRO-2 dominates ZeRO-1"). **That was wrong** — `ZeroRedundancyOptimizer` is
+exactly PyTorch's ZeRO-1. §5(a)'s actual argument stands on its own (identical
+communication, measured), but it lost a piece of corroboration it was never
+entitled to, and going looking for something runnable is what caught it.
 
 ---
 
@@ -488,3 +518,9 @@ Stated plainly, because several change how the numbers above should be read.
 10. **No tensor or pipeline parallelism.** ZeRO is data parallelism with
     sharding. The layer-splitting drawn in the session is a different axis and
     isn't simulated here.
+11. **I shard at element granularity; real ZeRO-1 shards at parameter
+    granularity.** My flat vector splits at exact element boundaries, giving
+    perfectly even shards. `ZeroRedundancyOptimizer` assigns whole tensors to
+    ranks greedily, so its shards are slightly uneven — measured at 0.03% off
+    even, in §9b. Negligible here, but it would grow for a model with a few
+    very large tensors (a big embedding table, say) and few ranks.

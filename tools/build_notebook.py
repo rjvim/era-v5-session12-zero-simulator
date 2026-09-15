@@ -560,7 +560,70 @@ The open questions from the session, with what this simulation says:
   below only by per-call latency, which this model does not capture.
 - *FP8?* Orthogonal to all of the above. It shrinks the 2Ψ fp16 terms but not
   the 12Ψ optimizer states, so the *sharding* argument is unchanged.
+"""),
 
+md("""
+## 8b · Validating against a real ZeRO implementation
+
+Everything above checks my simulator against the ZeRO **paper\'s arithmetic**
+and the lecture whiteboard. Both are checks against formulas. I wanted one
+check against a *running* implementation.
+
+**ZeRO-1: done, and it passes.**
+`torch.distributed.optim.ZeroRedundancyOptimizer` is PyTorch\'s own ZeRO-1 and
+runs on the gloo/CPU backend, so `validate_fsdp_cpu.py` was actually executed
+and its output is committed.
+"""),
+
+code("""
+import json
+v = json.load(open('artifacts/exp11_fsdp_cpu_validation.json'))
+print(f"Psi={v['psi']:,}  world={v['world']}  backend={v['backend']}")
+for s, d in sorted(v['stages'].items()):
+    m, p = d['measured'], d['predicted']
+    print(f"  {d['implementation']:>31s}: "
+          f"params {m['param_elems']:>8,}  grads {m['grad_elems']:>8,}  "
+          f"moments {m['optim_moment_elems']:>9,} "
+          f"(pred {p['optim_moment_elems']:>9,.0f})  "
+          f"max err {max(d['relative_error'].values()):.4f}")
+print()
+print('loss agreement vs plain DDP:', v['loss_agreement_vs_no_shard'])
+print('all within 2%:', v['all_within_tolerance'])
+"""),
+
+md("""
+Two separate results there.
+
+**The ledger is right.** Real ZeRO-1 holds full parameters, full gradients and
+a quarter of the Adam moments on 4 ranks — exactly what the table in section 1
+predicts, with zero error on params and grads.
+
+**Stage-invariance, confirmed externally.** Loss agreement with plain DDP is
+**exactly 0.0**. My central claim now rests on PyTorch\'s implementation as
+well as on my own code, which is a much better place for it to rest.
+
+The 0.03% gap on moments is informative rather than noise: **real ZeRO-1 shards
+at parameter granularity, not element granularity.** It assigns whole tensors
+to ranks greedily, so its shards come out slightly uneven. My flat vector
+splits at exact element boundaries. Small, real, and recorded in limitations
+rather than rounded away.
+
+**ZeRO-2 and ZeRO-3: not validated.** FSDP is the equivalent for those, and it
+refuses to initialise without a GPU — *"FSDP needs a non-CPU accelerator
+device"*. There is no GPU on this machine. `validate_against_fsdp.py` is the
+harness, ready for Colab, and it is **unrun with no committed output** —
+fabricating numbers would be worse than an admitted gap. Its tolerance is
+written into the script before running so it cannot be moved afterwards.
+
+**And a claim this corrected.** An earlier draft of my README said PyTorch has
+no ZeRO-1 equivalent and that stage 1 needs DeepSpeed, and used that to
+support section 7b(a). Wrong — `ZeroRedundancyOptimizer` is exactly it. That
+argument stands on its own measured evidence (identical communication), but it
+lost a piece of corroboration it was never entitled to. Going looking for
+something runnable is what caught it.
+"""),
+
+md("""
 ## 9 · Limitations
 
 See README §8 for the full list. The ones that matter most for reading these
