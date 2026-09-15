@@ -99,6 +99,30 @@ def fig_bucket_tradeoff(sweep: dict, ax=None):
     return ax
 
 
+def fig_activation_floor(toy: dict, ax=None):
+    """Model states shrink 32x; activations do not move at all.
+
+    The grey block is what ZeRO cannot touch. By ZeRO-3 it is most of the bar,
+    which is the difference between the 32x headline and the 5.92x measured.
+    """
+    ax = ax or plt.subplots(figsize=(7.5, 4.4))[1]
+    x = np.arange(4)
+    ms = np.array([toy[str(s)]["model_state_bytes"] / 1024 for s in range(4)])
+    act = np.array([toy[str(s)]["activation_bytes"] / 1024 for s in range(4)])
+    ax.bar(x, ms, label="model states (ZeRO shards these)", color="#4C72B0")
+    ax.bar(x, act, bottom=ms, label="activations (ZeRO does NOT)", color="#999999")
+    for i in range(4):
+        ax.text(i, ms[i] + act[i] + 8, f"{toy[str(i)]['peak_reduction']:.2f}x",
+                ha="center", fontsize=9, fontweight="bold")
+    ax.set_xticks(x, STAGE_LABEL)
+    ax.set_ylabel("peak per-GPU memory (KiB)")
+    ax.set_title("What ZeRO shards, and what it doesn't\n"
+                 "labels = measured PEAK reduction (model-state reduction is 32x)")
+    ax.legend(frameon=False, fontsize=9)
+    ax.set_ylim(0, (ms + act).max() * 1.16)
+    return ax
+
+
 def fig_throughput_frontier(ax=None):
     """Memory vs throughput for models that fit under every stage.
 

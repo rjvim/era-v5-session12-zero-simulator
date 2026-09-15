@@ -261,6 +261,59 @@ def exp6_scaling_economics():
     return dump("exp6_scaling_economics.json", out)
 
 
+def exp10_activation_floor():
+    """What ZeRO does NOT shard.
+
+    ZeRO shards model states. It does not touch activations at all, so they
+    are identical on every stage and set a hard floor on peak memory. This is
+    why the headline "32x" (model states) and the measured peak reduction
+    (5.92x) differ, and why activation checkpointing is not optional at scale.
+    """
+    print("[10] the activation floor")
+    a = art_load("exp1_simulated_run.json")
+    out = {"toy": {}, "realistic": {}}
+    p0 = a["stages"]["0"]["peak_bytes_per_gpu"]
+    m0 = a["stages"]["0"]["model_state_bytes_per_gpu"]
+    for s in STAGES:
+        d = a["stages"][str(s)]
+        bd = d["peak_breakdown"]
+        out["toy"][str(s)] = {
+            "name": d["name"],
+            "model_state_bytes": d["model_state_bytes_per_gpu"],
+            "peak_bytes": d["peak_bytes_per_gpu"],
+            "activation_bytes": bd.get("activations", 0),
+            "model_state_reduction": m0 / d["model_state_bytes_per_gpu"],
+            "peak_reduction": p0 / d["peak_bytes_per_gpu"],
+            "activation_share_of_peak": bd.get("activations", 0) / d["peak_bytes_per_gpu"],
+        }
+
+    # Realistic scale, same activation estimate the engine uses.
+    PSI, LAYERS, D, SEQ, B = 27.9e9, 64, 7168, 8192, 1
+    act = 34 * B * SEQ * D * LAYERS * FP16
+    for s in STAGES:
+        ms = model_state_bytes(PSI, 8, s).total
+        out["realistic"][str(s)] = {
+            "model_state_gb": round(ms / 1e9, 1),
+            "activation_gb_no_checkpointing": round(act / 1e9, 1),
+            "total_gb": round((ms + act) / 1e9, 1),
+            "activation_share": round(act / (ms + act), 3),
+        }
+    out["note"] = (
+        "At realistic scale activations dwarf even DP's model states. Sharding "
+        "model states 32x is pointless if activations alone are hundreds of GB, "
+        "which is why activation checkpointing is mandatory rather than an "
+        "optimisation, and why ZeRO-R exists to shard activations separately. "
+        "My simulator does NOT implement checkpointing, so the realistic column "
+        "is an upper bound on activation cost, not a prediction of a real run."
+    )
+    return dump("exp10_activation_floor.json", out)
+
+
+def art_load(name):
+    with open(os.path.join(ART, name)) as f:
+        return json.load(f)
+
+
 # ---------------------------------------------------------------------------
 def exp7_throughput():
     """The COMPUTE half of the assignment.
@@ -402,4 +455,5 @@ if __name__ == "__main__":
     exp7_throughput()
     exp8_throughput_frontier()
     exp9_measured_flops()
+    exp10_activation_floor()
     print("\ndone.")

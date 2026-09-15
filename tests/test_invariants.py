@@ -155,6 +155,8 @@ NUMBERS_IN_README = [
     "137,312", "84,860", "160.0",
     "1.741", "1,864", "1,802", "1,692", "1,251", "8,080", "7,515",
     "31,760", "16,065", "0.94", "33.55", "4.29",
+    "502,784", "188,072", "135,620", "84,860", "5.92", "69,632",
+    "255.6", "311.4", "702.0", "409.0", "360.2", "82%",
 ]
 
 
@@ -243,7 +245,7 @@ def test_notebook_has_figures():
     figs = sum(1 for c in nb.cells for o in c.get("outputs", [])
                if o.get("output_type") == "display_data"
                and "image/png" in o.get("data", {}))
-    assert figs >= 3, f"expected at least 3 rendered figures, found {figs}"
+    assert figs >= 4, f"expected at least 4 rendered figures, found {figs}"
 
 
 def test_notebook_outputs_are_committed():
@@ -262,6 +264,7 @@ def test_plots_module_importable_and_runs():
                plots.fig_throughput_frontier):
         ax = fn()
         assert ax is not None
+    assert plots.fig_activation_floor(art("exp10_activation_floor.json")["toy"]) is not None
 
 
 def test_fsdp_validation_harness_exists_and_states_tolerance():
@@ -333,3 +336,44 @@ def test_requirements_covers_every_third_party_import():
                    if m not in stdlib and m != "zerosim" and not m.startswith("_")}
     missing = third_party - declared
     assert not missing, f"used but not in requirements.txt: {sorted(missing)}"
+
+
+# ------------------------------------------------------- activation floor
+def test_peak_reduction_is_reported_not_just_model_states():
+    """Guards against cherry-picking the 32x model-state figure.
+
+    The README must quote the measured PEAK reduction (5.92x) alongside the
+    model-state reduction (32x), because ZeRO does not shard activations and
+    the two numbers genuinely differ.
+    """
+    a = art("exp10_activation_floor.json")["toy"]
+    assert a["3"]["model_state_reduction"] == pytest.approx(32.0, abs=0.01)
+    assert a["3"]["peak_reduction"] == pytest.approx(5.92, abs=0.01)
+    assert a["3"]["activation_share_of_peak"] == pytest.approx(0.82, abs=0.01)
+
+
+def test_activations_identical_across_stages():
+    """ZeRO shards model states, never activations."""
+    a = art("exp10_activation_floor.json")["toy"]
+    acts = {v["activation_bytes"] for v in a.values()}
+    assert len(acts) == 1, f"activations differ across stages: {acts}"
+    assert acts.pop() == 69632
+
+
+def test_nothing_fits_at_realistic_scale_with_activations():
+    """The correction to my own section 4 claim: counting activations, no
+    stage fits an 80 GB card without checkpointing."""
+    r = art("exp10_activation_floor.json")["realistic"]
+    for s in "0123":
+        assert r[s]["total_gb"] > 80, f"stage {s} unexpectedly fits"
+    assert r["3"]["total_gb"] == pytest.approx(311.4, abs=0.1)
+    assert r["3"]["activation_gb_no_checkpointing"] == pytest.approx(255.6, abs=0.1)
+
+
+def test_readme_does_not_contradict_itself_on_fitting():
+    """Section 4 says 'only ZeRO-3 fits'. That must be scoped to model states
+    and cross-referenced, or the two sections contradict."""
+    with open(README) as f:
+        s = f.read()
+    assert "only stage whose model\nstates fit" in s or "model states only" in s
+    assert "3b" in s, "the activation-floor section must be cross-referenced"

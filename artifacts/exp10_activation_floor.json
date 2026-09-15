@@ -1,0 +1,67 @@
+{
+  "note": "At realistic scale activations dwarf even DP's model states. Sharding model states 32x is pointless if activations alone are hundreds of GB, which is why activation checkpointing is mandatory rather than an optimisation, and why ZeRO-R exists to shard activations separately. My simulator does NOT implement checkpointing, so the realistic column is an upper bound on activation cost, not a prediction of a real run.",
+  "realistic": {
+    "0": {
+      "activation_gb_no_checkpointing": 255.6,
+      "activation_share": 0.364,
+      "model_state_gb": 446.4,
+      "total_gb": 702.0
+    },
+    "1": {
+      "activation_gb_no_checkpointing": 255.6,
+      "activation_share": 0.625,
+      "model_state_gb": 153.4,
+      "total_gb": 409.0
+    },
+    "2": {
+      "activation_gb_no_checkpointing": 255.6,
+      "activation_share": 0.71,
+      "model_state_gb": 104.6,
+      "total_gb": 360.2
+    },
+    "3": {
+      "activation_gb_no_checkpointing": 255.6,
+      "activation_share": 0.821,
+      "model_state_gb": 55.8,
+      "total_gb": 311.4
+    }
+  },
+  "toy": {
+    "0": {
+      "activation_bytes": 69632,
+      "activation_share_of_peak": 0.1384928716904277,
+      "model_state_bytes": 433152,
+      "model_state_reduction": 1.0,
+      "name": "DP (no ZeRO)",
+      "peak_bytes": 502784,
+      "peak_reduction": 1.0
+    },
+    "1": {
+      "activation_bytes": 69632,
+      "activation_share_of_peak": 0.3702411842273172,
+      "model_state_bytes": 118440,
+      "model_state_reduction": 3.657142857142857,
+      "name": "ZeRO-1",
+      "peak_bytes": 188072,
+      "peak_reduction": 2.6733591390531286
+    },
+    "2": {
+      "activation_bytes": 69632,
+      "activation_share_of_peak": 0.5134345966671582,
+      "model_state_bytes": 65988,
+      "model_state_reduction": 6.564102564102564,
+      "name": "ZeRO-2",
+      "peak_bytes": 135620,
+      "peak_reduction": 3.707299808287863
+    },
+    "3": {
+      "activation_bytes": 69632,
+      "activation_share_of_peak": 0.8205514965826066,
+      "model_state_bytes": 13536,
+      "model_state_reduction": 32.0,
+      "name": "ZeRO-3",
+      "peak_bytes": 84860,
+      "peak_reduction": 5.924864482677351
+    }
+  }
+}

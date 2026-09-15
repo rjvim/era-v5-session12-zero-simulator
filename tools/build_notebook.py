@@ -235,6 +235,48 @@ all. Only ZeRO-3 has slope −1. Everything between is partial.
 """),
 
 md("""
+### 3b · The 32x is model states. Real peak falls 5.92x.
+
+I nearly reported only the 32x figure, and that would have been cherry-picking
+my own result.
+
+**ZeRO does not shard activations. At all.** They are byte-identical on every
+stage, so they set a hard floor under peak memory. As model states get sharded
+away, activations become most of what is left — 14% of DP\'s peak, but **82%
+of ZeRO-3\'s**. That is the whole difference between 32x and 5.92x.
+"""),
+
+code("""
+import json
+floor = json.load(open('artifacts/exp10_activation_floor.json'))
+fig, ax = plt.subplots(figsize=(8, 4.6))
+plots.fig_activation_floor(floor['toy'], ax=ax)
+plt.tight_layout(); plt.show()
+
+print()
+print('Realistic: Psi=27.9B, 64L, d=7168, seq=8192, N=8, NO checkpointing')
+for s in '0123':
+    v = floor['realistic'][s]
+    print(f"  {STAGE_NAME[int(s)]:14s} states {v['model_state_gb']:>6.1f} GB "
+          f"+ acts {v['activation_gb_no_checkpointing']:>6.1f} GB "
+          f"= {v['total_gb']:>6.1f} GB  "
+          f"{'FITS' if v['total_gb'] <= 80 else 'does NOT fit 80GB'}")
+"""),
+
+md("""
+**Nothing fits.** Activations alone are 255.6 GB — more than three 80 GB cards
+— and sharding model states 32x is nearly beside the point next to that.
+
+This corrects a claim I make in the next section. When I say "ZeRO-3 is the
+only stage that fits at 27.9B", that is about **model states only**. Counting
+activations, no stage fits without activation checkpointing. Fitting is a
+joint property of the ZeRO stage *and* the activation strategy, and this
+simulator models only the first — which is exactly why checkpointing is
+mandatory at scale rather than an optimisation, and why the ZeRO paper has a
+separate ZeRO-R for sharding activations.
+"""),
+
+md("""
 ## 4b · Compute — what changes, and what doesn\'t
 
 This is the part I initially had wrong in my own head.
@@ -277,7 +319,8 @@ boundary.** Inside one node it costs 3.3% throughput — basically free. Across
 8 nodes, 26%. Same stage, same model. The 1.5× multiplier is constant; what
 changes is the bandwidth it multiplies against.
 
-**At 27.9B on 8× 80GB H100s, ZeRO-3 is the only stage that fits at all.** So
+**At 27.9B on 8× 80GB H100s, ZeRO-3 is the only stage whose MODEL
+STATES fit** (see 3b — counting activations, none of them fit). So
 the throughput comparison against DP is hypothetical — you cannot run DP. That
 reframed the question for me: often it isn\'t "which is faster", it\'s "which
 ones are even available".

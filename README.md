@@ -6,7 +6,7 @@ ZeRO-1/2/3, show how memory and computation change.
 ```
 pip install -r requirements.txt   # numpy, matplotlib, pytest, nbformat
 python run_experiments.py       # regenerates every artifact
-python -m pytest tests/ -q      # 53 tests
+python -m pytest tests/ -q      # 57 tests
 jupyter notebook notebook.ipynb # narrated walkthrough, figures + outputs committed
 ```
 
@@ -106,12 +106,12 @@ have to *emerge*. They do, which is the point.
 A 27,072-parameter transformer (2 layers, 2 heads, d=32), 30 steps, on a
 syllable-level mantra corpus, across 4 nodes of 8.
 
-| Stage | Model states/GPU | Reduction | Comm/GPU/step | In Ψ | Loss |
-| --- | ---: | ---: | ---: | ---: | --- |
-| DP | 433,152 B | 1.00× | 104,904 B | 1.94Ψ | 3.243 → 0.510 |
-| ZeRO-1 | 118,440 B | 3.66× | 104,904 B | 1.94Ψ | 3.243 → 0.510 |
-| ZeRO-2 | 65,988 B | 6.56× | 104,904 B | 1.94Ψ | 3.243 → 0.510 |
-| ZeRO-3 | 13,536 B | **32.00×** | 157,356 B | 2.91Ψ | 3.243 → 0.510 |
+| Stage | Model states/GPU | Reduction | **Peak/GPU** | **Peak red.** | Comm/GPU/step | In Ψ | Loss |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| DP | 433,152 B | 1.00× | 502,784 B | 1.00× | 104,904 B | 1.94Ψ | 3.243 → 0.510 |
+| ZeRO-1 | 118,440 B | 3.66× | 188,072 B | 2.67× | 104,904 B | 1.94Ψ | 3.243 → 0.510 |
+| ZeRO-2 | 65,988 B | 6.56× | 135,620 B | 3.71× | 104,904 B | 1.94Ψ | 3.243 → 0.510 |
+| ZeRO-3 | 13,536 B | **32.00×** | 84,860 B | **5.92×** | 157,356 B | 2.91Ψ | 3.243 → 0.510 |
 
 **ZeRO-3's reduction is exactly 32.00× — the world size.** Not approximately.
 `16Ψ → 16Ψ/N`, nothing left replicated.
@@ -123,6 +123,49 @@ syllable-level mantra corpus, across 4 nodes of 8.
 tokens specifically because "all four stages produced the same loss" is nearly
 worthless if the model learned nothing. 3.243 → 0.510 means the trajectory is
 non-trivial, so agreeing on it is informative.
+
+### 3b. The 32× is model states. Real peak falls 5.92×.
+
+I nearly published only the 32× figure, and I think that would have been
+cherry-picking my own result. The two reduction columns above disagree, and
+the gap is the most important thing in this section.
+
+**ZeRO does not shard activations. At all.** They are byte-identical on every
+stage — 69,632 B here — so they set a hard floor under peak memory. As you
+shard model states away, activations become a larger and larger share of
+what's left:
+
+| Stage | Activation share of peak |
+| --- | ---: |
+| DP | 14% |
+| ZeRO-1 | 37% |
+| ZeRO-2 | 51% |
+| ZeRO-3 | **82%** |
+
+By ZeRO-3, four fifths of the memory is something ZeRO doesn't touch. That is
+why 32× on model states becomes 5.92× on peak.
+
+And at realistic scale it is far worse. Ψ = 27.9B, 64 layers, d = 7168,
+seq = 8192, batch 1 per GPU, N=8, **no activation checkpointing**:
+
+| Stage | Model states | + Activations | Total | Fits 80 GB? |
+| --- | ---: | ---: | ---: | --- |
+| DP | 446.4 GB | 255.6 GB | 702.0 GB | ✗ |
+| ZeRO-1 | 153.4 GB | 255.6 GB | 409.0 GB | ✗ |
+| ZeRO-2 | 104.6 GB | 255.6 GB | 360.2 GB | ✗ |
+| ZeRO-3 | 55.8 GB | 255.6 GB | **311.4 GB** | **✗** |
+
+**Nothing fits.** Activations alone are 255.6 GB — more than three 80 GB cards
+— and sharding model states 32× is almost beside the point next to that.
+
+This changes a claim I make later in §4 and I want to flag it here rather than
+let the two sections quietly contradict each other: when I say "ZeRO-3 is the
+only stage that fits at 27.9B", that is a statement about **model states
+only**. Counting activations, no stage fits without activation
+checkpointing. That is precisely why checkpointing is mandatory at scale
+rather than an optimisation, and why the ZeRO paper has a separate ZeRO-R for
+sharding activations. My simulator implements neither, so the table above is
+an **upper bound** on activation cost, not a prediction of a real run.
 
 ---
 
@@ -157,11 +200,16 @@ boundary.** Inside one node it costs 3.3% throughput — essentially free. Acros
 8 nodes it costs 26%. Same stage, same model. The 1.5× multiplier is constant;
 what changes is the bandwidth it multiplies against.
 
-**At 27.9B on 80GB H100s with 8 GPUs, ZeRO-3 is the only stage that fits at
-all.** DP needs 446 GB, ZeRO-1 153, ZeRO-2 105, ZeRO-3 55.8. So the throughput
-comparison against DP is hypothetical — you cannot run DP. That reframed the
-question for me: often the choice isn't "which is faster", it's "which ones are
-even available".
+**At 27.9B on 80GB H100s with 8 GPUs, ZeRO-3 is the only stage whose model
+states fit.** DP needs 446 GB, ZeRO-1 153, ZeRO-2 105, ZeRO-3 55.8. So the
+throughput comparison against DP is hypothetical — you cannot run DP. That
+reframed the question for me: often the choice isn't "which is faster", it's
+"which ones are even available".
+
+Important caveat, carried forward from §3b: the "fits" column here counts
+**model states only**. Add activations and no stage fits on an 80 GB card
+without activation checkpointing. Fitting is a joint property of ZeRO stage
+*and* activation strategy, and this simulator only models the first.
 
 ### Where the trade actually bites
 
@@ -329,12 +377,12 @@ zerosim/threaded.py      real CPU-thread execution of the 32 ranks
 zerosim/plots.py         the four figures
 zerosim/engine.py        stages 0-3, actually executed
 zerosim/data.py          syllable-level mantra corpus
-run_experiments.py       regenerates artifacts/ (9 experiments)
+run_experiments.py       regenerates artifacts/ (10 experiments)
 tools/build_notebook.py  regenerates notebook.ipynb
 requirements.txt         core deps; -validation.txt is torch, for 9b only
 validate_against_fsdp.py checks the ledger against real PyTorch FSDP (see 9b)
-tests/                   53 tests
-notebook.ipynb           narrated walkthrough, 3 figures, outputs committed
+tests/                   57 tests
+notebook.ipynb           narrated walkthrough, 4 figures, outputs committed
 ```
 
 Every number quoted in this README is re-asserted against its generating
@@ -424,8 +472,12 @@ Stated plainly, because several change how the numbers above should be read.
    output head and attention are a large share of a tiny model. At 27.9B the
    rule is good to a few percent. Recorded rather than quoted as exact.
 6. **Activations are estimated** (`~34·B·T·d` per layer), not derived from the
-   real tape. Identical across stages, so it never distorts the comparison, but
-   this is not an activation-checkpointing study.
+   real tape, and **no activation checkpointing is modelled**. Because ZeRO
+   does not shard activations, they are identical across stages and never
+   distort the *comparison* — but they dominate absolute peak (82% of ZeRO-3's
+   peak here), so the realistic table in §3b is an upper bound on memory, not
+   a prediction. A real run at that scale would use checkpointing and/or
+   ZeRO-R, neither of which is implemented.
 7. **Ring collectives assumed.** Tree/hierarchical algorithms have different
    constants.
 8. **The model is tiny** (27,072 parameters) — deliberate, so all 32 ranks run
