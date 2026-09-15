@@ -605,7 +605,7 @@ print('loss agreement vs DP:', v['loss_agreement_vs_dp'])
 md("""
 **ZeRO-3 / ZeRO-2 communication: exactly 1.5**, at both N=2 and N=4. This is
 the strongest external check in the whole project. The 1.5x is not assumed
-anywhere in my code — it falls out of the ring costs in `fabric.py` — and real
+anywhere in my code — it falls out of the ring costs in `zerosim/fabric.py` — and real
 FSDP2 reproduces it because `reshard_after_forward=True` genuinely frees the
 gathered weights after the forward pass, forcing the backward to all-gather
 again. The call counts show it outright: **5 all-gathers for ZeRO-2, 10 for

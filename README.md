@@ -448,7 +448,7 @@ to per-rank ring cost:
 
 **ZeRO-3 / ZeRO-2 ratio: exactly 1.5**, at both N=2 and N=4. This is the
 strongest result here. The 1.5× is not an assumption anywhere in my code — it
-falls out of the ring costs in `fabric.py` — and real FSDP2 reproduces it
+falls out of the ring costs in `zerosim/fabric.py` — and real FSDP2 reproduces it
 because `reshard_after_forward=True` genuinely frees the gathered weights
 after the forward pass, forcing the backward to all-gather again. The call
 counts show it directly: **5 all-gathers for ZeRO-2, 10 for ZeRO-3**, with 5
