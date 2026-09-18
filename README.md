@@ -6,7 +6,7 @@ ZeRO-1/2/3, show how memory and computation change.
 ```
 pip install -r requirements.txt   # numpy, matplotlib, pytest, nbformat
 python run_experiments.py       # regenerates every artifact
-python -m pytest tests/ -q      # 80 tests
+python -m pytest tests/ -q      # 81 tests
 jupyter notebook notebook.ipynb # narrated walkthrough, figures + outputs committed
 ```
 
@@ -393,7 +393,7 @@ validate_fsdp_cpu.py     RUN: earlier ZeRO-1-only check
 tools/build_notebook.py  regenerates notebook.ipynb
 requirements.txt         core deps; -validation.txt is torch, for 9b only
 validate_against_fsdp.py UNRUN: needs a GPU, for ZeRO-2/3 (see 9b)
-tests/                   80 tests
+tests/                   81 tests
 notebook.ipynb           narrated walkthrough, 4 figures, outputs committed
 ```
 
@@ -593,10 +593,8 @@ Stated plainly, because several change how the numbers above should be read.
    mixed-precision run and only ratios are exact. The ratios **are** now
    checked against a real allocator peak in §9c (within 25%) and the sharding
    arithmetic against real PyTorch in §9b. What is still unmeasured is CUDA
-   allocator behaviour specifically: fragmentation, caching, and
-   device-side communication buffers.
-   Sharding arithmetic and communication volume **are** validated against real
-   PyTorch in §9b; allocator peak is not, and needs a GPU.
+   allocator behaviour specifically: fragmentation, caching, and device-side
+   communication buffers.
 2. **`compute_fraction_of_step` is not MFU.** It is `compute_s / step_s`, and
    `compute_s` is itself derived from the assumed TFLOP/s — circular as an
    efficiency metric, and it would read ~1.0 for a perfectly overlapped run
@@ -616,9 +614,12 @@ Stated plainly, because several change how the numbers above should be read.
    real tape, and **no activation checkpointing is modelled**. Because ZeRO
    does not shard activations, they are identical across stages and never
    distort the *comparison* — but they dominate absolute peak (82% of ZeRO-3's
-   peak here), so the realistic table in §3b is an upper bound on memory, not
-   a prediction. A real run at that scale would use checkpointing and/or
-   ZeRO-R, neither of which is implemented.
+   peak here). **Measured in §9c: the rule overestimates real activations by
+   about 2.3×** (measured 0.436× of it), because flash-style attention never
+   materialises the T×T matrix the coefficient 34 assumes. §3b carries the
+   corrected figures, and the table there is still an upper bound — a real run
+   at that scale would use activation checkpointing and/or ZeRO-R, neither of
+   which is implemented.
 7. **Ring collectives assumed.** Tree/hierarchical algorithms have different
    constants.
 8. **The model is tiny** (27,072 parameters) — deliberate, so all 32 ranks run
